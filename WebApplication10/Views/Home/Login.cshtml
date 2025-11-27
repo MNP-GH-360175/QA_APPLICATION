@@ -1,0 +1,92 @@
+﻿@{
+    ViewData["Title"] = "Login";
+    Layout = null; // No shared layout needed for login page
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        body {
+            background: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="card login-card bg-white">
+        <div class="card-body">
+            <h2 class="text-center mb-4">Employee Login</h2>
+
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label class="form-label">EmpCode</label>
+                    <input type="text" class="form-control" id="EmpCode" required autofocus />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-control" id="Password" required />
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Login</button>
+            </form>
+
+            <div id="errorMessage" class="mt-3 text-danger text-center"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById("loginForm").addEventListener("submit", async function (e) {
+            e.preventDefault();
+
+            const empCode = document.getElementById("EmpCode").value.trim();
+            const password = document.getElementById("Password").value;
+            const errorDiv = document.getElementById("errorMessage");
+            errorDiv.textContent = "";
+
+            try {
+                const response = await fetch('/api/Auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ EmpCode: empCode, Password: password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Save BOTH token and employee name
+                    localStorage.setItem('jwtToken', data.token);
+                    localStorage.setItem('empName', data.empName);   // This was missing!
+
+                    // Optional: also save empCode if you want
+                    localStorage.setItem('empCode', data.empCode);
+
+                    window.location.href = '/Home/Dashboard';
+                }
+                else {
+                    errorDiv.textContent = data.message || "Invalid EmpCode or Password";
+                }
+            }
+            catch (err) {
+                errorDiv.textContent = "Network error. Please try again.";
+                console.error(err);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - QA PROJECT</title>
+
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/dashboard.css" asp-append-version="true" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+
+    <!-- Top Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">QUALITY ASSURANCE TEAM Portal</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto align-items-center">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center text-white"
+                           href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user-circle fa-lg me-2"></i>
+                            <span id="navbarUserName">User</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                            <li>
+                                <a class="dropdown-item" href="#" id="logoutBtn">
+                                    <i class="fas fa-sign-out-alt me-2"></i> Logout
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header text-center py-4">
+            <h5 class="text-white mb-0">Menu</h5>
+        </div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link active" href="/Home/Dashboard">
+                    <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/Home/ReleaseStatus">
+                    <i class="fas fa-rocket me-2"></i> Release Status
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/Home/DailyVerification">
+                    <i class="fas fa-check-circle me-2"></i> Daily Verification
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#">
+                    <i class="fas fa-file-alt me-2"></i> CRF List
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#">
+                    <i class="fas fa-vial me-2"></i> Test Cases
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#">
+                    <i class="fas fa-bug me-2"></i> Bug Report
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="content">
+        <div class="container-fluid">
+            @RenderBody()   <!-- THIS LINE WAS MISSING! -->
+        </div>
+    </div>
+
+    <!-- Load scripts ONCE only -->
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const token = localStorage.getItem('jwtToken');
+            const empName = localStorage.getItem('empName');
+
+            // Redirect to login if not authenticated
+            if (!token || !empName) {
+                window.location.href = '/Home/Login';
+                return;
+            }
+
+            // Show real name
+            const navbarUserName = document.getElementById('navbarUserName');
+            const userDisplayName = document.getElementById('userDisplayName');
+            if (navbarUserName) navbarUserName.textContent = empName;
+            if (userDisplayName) userDisplayName.textContent = empName + "!";
+
+            // Optional: validate token with backend
+            fetch('/api/Auth/dashboard', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            }).catch(() => logout());
+
+            // LOGOUT WITH CONFIRMATION — NOW WORKS!
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+
+                    const overlay = document.createElement('div');
+                    overlay.id = 'logoutOverlay';
+                    overlay.innerHTML = `
+                                        <div style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;">
+                                            <div style="background:white;padding:35px;border-radius:15px;text-align:center;max-width:420px;box-shadow:0 15px 35px rgba(0,0,0,0.3);">
+                                                <i class="fas fa-exclamation-triangle fa-4x text-warning mb-4"></i>
+                                                <h3>Confirm Logout</h3>
+                                                <p class="text-muted mb-4">Are you sure you want to logout,<br><strong>${empName}</strong>?</p>
+                                                <button id="confirmYes" class="btn btn-danger px-4">Yes, Logout</button>
+                                                <button id="confirmNo" class="btn btn-secondary px-4 ms-2">No, Stay</button>
+                                            </div>
+                                        </div>`;
+
+                    document.body.appendChild(overlay);
+
+                    document.getElementById('confirmYes').onclick = () => logout();
+                    document.getElementById('confirmNo').onclick = () => overlay.remove();
+                    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+                });
+            }
+
+            function logout() {
+                localStorage.removeItem('jwtToken');
+                localStorage.removeItem('empName');
+                window.location.href = '/Home/Login';
+            }
+        });
+    </script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

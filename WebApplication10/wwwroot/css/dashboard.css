@@ -1,0 +1,64 @@
+﻿/* dashboard.css */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f8f9fa;
+}
+
+.navbar {
+    z-index: 1000;
+}
+
+.sidebar {
+    height: 100vh;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    width: 220px;
+    background-color: #343a40;
+    color: #fff;
+    padding-top: 20px;
+    overflow-y: auto;
+    z-index: 999;
+}
+
+    .sidebar .nav-link {
+        color: #ddd;
+        padding: 12px 20px;
+        display: block;
+        border-radius: 4px;
+        margin: 5px 15px;
+    }
+
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background-color: #495057;
+            color: #fff;
+            text-decoration: none;
+        }
+
+.content {
+    margin-left: 220px;
+    padding: 20px;
+    margin-top: 56px;
+    min-height: calc(100vh - 56px);
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+        top: 0;
+    }
+
+    .content {
+        margin-left: 0;
+        margin-top: 56px;
+    }
+
+    .navbar-brand {
+        font-size: 1rem;
+    }
+}

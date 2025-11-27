@@ -1,0 +1,32 @@
+﻿body {
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: url('/images/bg6.jpg') no-repeat center center fixed;
+    background-size: cover;
+    background-color: #FFD700;
+    font-family: Arial, sans-serif;
+}
+
+/* Remove the existing login-container styles since Flexbox handles positioning */
+.login-container {
+    display: flex; /* Flex container, optional if directly on body */
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 10%;
+}
+
+/* Keep your login-box styles for appearance */
+.login-box {
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    max-width: 400px;
+    width: 100%;
+    box-sizing: border-box; /* Ensure padding is included in width */
+}
