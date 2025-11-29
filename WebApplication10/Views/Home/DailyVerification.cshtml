@@ -105,12 +105,21 @@
             });
             if (!valid) return;
 
+            function formatDateForOracle(dateStr) {
+                const date = new Date(dateStr);
+                const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = months[date.getMonth()];
+                const year = date.getFullYear();
+                return `${day}-${month}-${year}`; // e.g., 31-OCT-2025
+            }
+
             const filters = {
                 releaseType: document.getElementById("releaseType").value,
-                fromDate: document.getElementById("fromDate").value,
-                toDate: document.getElementById("toDate").value,
-                testerTL: document.getElementById("testerTL").value,
-                testerName: document.getElementById("testerName").value
+                fromDate: formatDateForOracle(document.getElementById("fromDate").value),
+                toDate: formatDateForOracle(document.getElementById("toDate").value),
+                testerTL: document.getElementById("testerTL").value || null,
+                testerName: document.getElementById("testerName").value || null
             };
 
             const token = localStorage.getItem('jwtToken');
@@ -124,8 +133,14 @@
                 verificationData = await res.json();
                 document.getElementById("resultCard").style.display = "block";
                 renderTable();
+            } else if (res.status === 401) {
+                alert("Session expired. Please login again.");
+                window.location.href = "/Home/Login";
+            } else if (res.status === 400) {
+                const err = await res.text();
+                alert("Invalid date format or filters: " + err);
             } else {
-                alert("No records found or session expired");
+                alert("No records found for the selected criteria.");
             }
         });
 

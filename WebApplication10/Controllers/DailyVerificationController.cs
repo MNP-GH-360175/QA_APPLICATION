@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Oracle.ManagedDataAccess.Client;
+using System.Data;
 
 namespace WebApplication10.Controllers
 {
@@ -7,29 +9,77 @@ namespace WebApplication10.Controllers
     [ApiController]
     public class DailyVerificationController : ControllerBase
     {
-        // GET yesterday's data or filtered data
+        private readonly IConfiguration _config;
+        private readonly string _connStr;
+
+        public DailyVerificationController(IConfiguration config)
+        {
+            _config = config;
+            _connStr = _config.GetConnectionString("OracleConnection"); // Same as Auth
+        }
+
         [HttpPost]
-        [Authorize]
-        public IActionResult GetReport([FromBody] object filters)
+        //[Authorize]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetReport([FromBody] FilterModel filters)
         {
-            // Sample data - replace with real Oracle query later
-            var data = new[]
+            if (filters == null || string.IsNullOrEmpty(filters.fromDate) || string.IsNullOrEmpty(filters.toDate))
+                return BadRequest("FromDate and ToDate are required.");
+
+            var result = new List<object>();
+
+            using (var conn = new OracleConnection(_connStr))
             {
-                new { crfId = "131001", subject = "Payment Gateway Fix", releaseDate = "2025-11-21", developer = "Suresh K", tester = "Rajendran N", workingStatus = (string)null },
-                new { crfId = "131002", subject = "Export Report Issue", releaseDate = "2025-11-21", developer = "Anil M", tester = "Aswathy Chandran", workingStatus = "Working" },
-                new { crfId = "131003", subject = "Login Timeout", releaseDate = "2025-11-20", developer = "Priya R", tester = "Adhitya T S", workingStatus = "Not Working" },
-                new { crfId = "131003", subject = "Dashboard Load Slow", releaseDate = "2025-11-22", developer = "Vijay S", tester = "Anjitha K A", workingStatus = "In Progress" }
-            };
+                await conn.OpenAsync();
+                using (var cmd = new OracleCommand("GET_DAILY_RELEASE_VERIFICATION", conn))
+                {
+                    cmd.CommandType = CommandType.StoredProcedure;
 
-            return Ok(data);
-        }
+                    cmd.Parameters.Add("p_from_date", OracleDbType.Date).Value = DateTime.ParseExact(filters.fromDate, "dd-MMM-yyyy", null);
+                    cmd.Parameters.Add("p_to_date", OracleDbType.Date).Value = DateTime.ParseExact(filters.toDate, "dd-MMM-yyyy", null);
+                    cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = string.IsNullOrEmpty(filters.releaseType) ? (object)DBNull.Value : filters.releaseType;
+                    cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = string.IsNullOrEmpty(filters.testerTL) ? (object)DBNull.Value : filters.testerTL.Trim().ToUpper();
+                    cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = string.IsNullOrEmpty(filters.testerName) ? (object)DBNull.Value : filters.testerName.Trim().ToUpper();
 
-        [HttpPost("Save")]
-        [Authorize]
-        public IActionResult Save([FromBody] object[] updates)
-        {
-            // TODO: Save to Oracle table
-            return Ok(new { message = "All verifications saved successfully!" });
+                    var pResult = cmd.Parameters.Add("p_result", OracleDbType.RefCursor);
+                    pResult.Direction = ParameterDirection.Output;
+
+                    using (var reader = await cmd.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            result.Add(new
+                            {
+                                crfId = reader["CRF_ID"].ToString(),
+                                subject = reader["CRF_NAME"]?.ToString() ?? "",
+                                releaseDate = reader["RELEASE_DATE"]?.ToString(), // Already "31-OCT-2025 14:39"
+                                releaseType = reader["RELEASE_TYPE"]?.ToString(),
+                                developerTL = reader["DEVELOPER_TL_NAME"]?.ToString() ?? "Not Assigned",
+                                developer = reader["DEVELOPER_NAME"]?.ToString() ?? "Not Assigned",
+                                testerTL = reader["TESTER_TL_NAME"]?.ToString() ?? "Not Assigned",
+                                tester = reader["TESTER_NAME"]?.ToString() ?? "Not Assigned",
+                                workingStatus = (string)null,
+                                remarks = "",
+                                attachmentName = "",
+                                attachmentBase64 = "",
+                                isConfirmed = false,
+                                History = new List<object>()
+                            });
+                        }
+                    }
+                }
+            }
+
+            return Ok(result);
         }
+    }
+
+    public class FilterModel
+    {
+        public string releaseType { get; set; }
+        public string fromDate { get; set; }
+        public string toDate { get; set; }
+        public string testerTL { get; set; }
+        public string testerName { get; set; }
     }
 }
