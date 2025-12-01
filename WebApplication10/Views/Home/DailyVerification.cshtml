@@ -4,7 +4,9 @@
 }
 
 <div class="container-fluid mt-4">
-    <h3 class="mb-4 text-primary"><i class="fas fa-check-circle me-2"></i>Daily Release Verification</h3>
+    <h3 class="mb-4 text-primary">
+        <i class="fas fa-check-circle me-2"></i>Daily Release Verification
+    </h3>
 
     <!-- Filters -->
     <div class="card shadow-sm border-0 mb-4">
@@ -14,11 +16,11 @@
                     <div class="col-md-3">
                         <label class="form-label fw-bold">Release Type <span class="text-danger">*</span></label>
                         <select class="form-select" id="releaseType" required>
-                            <option value="">-- Select Release Type --</option>
-                            <option value="Exceptional and Expedite Report">Exceptional & Expedite</option>
+                            <option value="">-- Select Type --</option>
                             <option value="Daily Release Report">Daily Release Report</option>
+                            <option value="Exceptional and Expedite Report">Exceptional & Expedite</option>
                         </select>
-                        <div class="invalid-feedback">Please select Release Type</div>
+                        <div class="invalid-feedback">Required</div>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label fw-bold">From Date <span class="text-danger">*</span></label>
@@ -51,7 +53,9 @@
                         </select>
                     </div>
                     <div class="col-md-1">
-                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search"></i> Search</button>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-search"></i> Search
+                        </button>
                     </div>
                 </div>
             </form>
@@ -62,7 +66,7 @@
     <div class="card shadow-sm border-0" id="resultCard" style="display:none;">
         <div class="card-header bg-primary text-white d-flex justify-content-between">
             <h5 class="mb-0"><i class="fas fa-list-ul me-2"></i>Verification List</h5>
-            <small class="text-light">Fill Status + Remarks → Confirm → Edit if needed</small>
+            <small class="text-light">Fill Status + Remarks → Click Confirm</small>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -70,14 +74,15 @@
                     <thead class="table-light">
                         <tr>
                             <th>CRF ID</th>
-                            <th>Subject</th>
-                            <th>Release Date</th>
+                            <th width="110">Type</th>
+                            <th>CRF Name</th>
+                            <th width="140">Release Date</th>
                             <th>Developer</th>
                             <th>Tester</th>
-                            <th width="180">Working Status <span class="text-danger">*</span></th>
-                            <th width="320">Remarks <span class="text-danger">*</span></th>
+                            <th width="180">Working Status *</th>
+                            <th width="300">Remarks *</th>
                             <th width="180">Attachment</th>
-                            <th width="140">Action</th>
+                            <th width="130">Action</th>
                         </tr>
                     </thead>
                     <tbody id="verificationBody"></tbody>
@@ -90,42 +95,96 @@
 @section Scripts {
     <script>
         let verificationData = [];
+        let selectedReleaseType = "";
 
-        // Search with validation
+        function formatDateForOracle(dateStr) {
+            const d = new Date(dateStr);
+            const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+            return `${String(d.getDate()).padStart(2, '0')}-${months[d.getMonth()]}-${d.getFullYear()}`;
+        }
+
+        function getStatusBadge(status) {
+            const map = {
+                "Working": "bg-success text-white",
+                "Not Working": "bg-danger text-white",
+                "Partially Working": "bg-info text-white",
+                "In Progress": "bg-warning text-dark",
+                "On Hold": "bg-secondary text-white"
+            };
+            return map[status] || "bg-secondary text-white";
+        }
+
+        // Search
         document.getElementById("filterForm").addEventListener("submit", async e => {
             e.preventDefault();
             let valid = true;
-            document.querySelectorAll("#filterForm .form-control, #filterForm .form-select").forEach(el => {
-                if (el.hasAttribute("required") && !el.value) {
-                    el.classList.add("is-invalid");
-                    valid = false;
-                } else {
-                    el.classList.remove("is-invalid");
-                }
+            document.querySelectorAll("#filterForm [required]").forEach(el => {
+                if (!el.value.trim()) { el.classList.add("is-invalid"); valid = false; }
+                else el.classList.remove("is-invalid");
             });
             if (!valid) return;
 
-            const filters = {
-                releaseType: document.getElementById("releaseType").value,
-                fromDate: document.getElementById("fromDate").value,
-                toDate: document.getElementById("toDate").value,
-                testerTL: document.getElementById("testerTL").value,
-                testerName: document.getElementById("testerName").value
+            selectedReleaseType = document.getElementById("releaseType").value;
+
+            const payload = {
+                fromDate: formatDateForOracle(document.getElementById("fromDate").value),
+                toDate: formatDateForOracle(document.getElementById("toDate").value),
+                releaseType: selectedReleaseType || null,
+                testerTL: document.getElementById("testerTL").value || null,
+                testerName: document.getElementById("testerName").value || null
             };
 
             const token = localStorage.getItem('jwtToken');
-            const res = await fetch('/api/DailyVerification', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify(filters)
-            });
+            try {
+                const res = await fetch('/api/DailyVerification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify(payload)
+                });
 
-            if (res.ok) {
+                if (!res.ok) { alert("Search failed: " + await res.text()); return; }
+
                 verificationData = await res.json();
-                document.getElementById("resultCard").style.display = "block";
-                renderTable();
-            } else {
-                alert("No records found or session expired");
+
+                verificationData.forEach(item => {
+                    item.crfId = item.CRF_ID?.trim() || "N/A";
+                    item.subject = item.CRF_NAME || "Not Available";
+                    item.releaseDate = item.RELEASE_DATE || "";
+                    item.developer = item.DEVELOPER_NAME || "Not Assigned";
+                    item.tester = item.TESTER_NAME || "Not Assigned";
+
+                    // Parse history
+                    try {
+                        item.History = typeof item.HISTORY_JSON === "string" ? JSON.parse(item.HISTORY_JSON || "[]") : (item.HISTORY_JSON || []);
+                    } catch { item.History = []; }
+
+                    // Check if already verified today
+                    const today = new Date().toDateString();
+                    const verifiedToday = item.CURRENT_VERIFIED_ON && new Date(item.CURRENT_VERIFIED_ON).toDateString() === today;
+
+                    if (verifiedToday && item.CURRENT_STATUS) {
+                        item.workingStatus = item.CURRENT_STATUS;
+                        item.remarks = item.CURRENT_REMARKS || "";
+                        item.attachmentName = item.CURRENT_ATTACHMENT_NAME || "";
+                        item.isConfirmed = true;
+                    } else {
+                        item.workingStatus = "";
+                        item.remarks = "";
+                        item.attachmentName = "";
+                        item.attachmentBase64 = null;
+                        item.isConfirmed = false;
+                    }
+                });
+
+                document.getElementById("resultCard").style.display = verificationData.length ? "block" : "none";
+                if (verificationData.length === 0) {
+                    alert("No records found.");
+                } else {
+                    renderTable();
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error: " + err.message);
             }
         });
 
@@ -134,256 +193,188 @@
             tbody.innerHTML = "";
 
             verificationData.forEach((item, idx) => {
-                const isConfirmed = !!item.isConfirmed;
+                const isDaily = selectedReleaseType === "Daily Release Report";
+                const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
+                const badgeText = isDaily ? "Daily" : "Exp.";
+
+                const canConfirm = item.workingStatus && item.remarks?.trim();
 
                 const row = document.createElement("tr");
                 row.innerHTML = `
-                                                <td>
-                    <a href="#" class="text-primary fw-bold crf-link"
-                       data-crf='${JSON.stringify(item)}'
-                       style="text-decoration: none;">
-                        ${item.crfId}
-                    </a>
-                </td>
-                                <td>${item.subject || ''}</td>
-                                <td>${formatDate(item.releaseDate)}</td>
-                                <td>${item.developer || ''}</td>
-                                <td><span class="badge bg-info">${item.tester || ''}</span></td>
-
-                                <!-- Working Status -->
-                                <td>
-                                    ${isConfirmed
-                        ? `<span class="badge ${getStatusClass(item.workingStatus)} fw-bold">${item.workingStatus}</span>`
+                            <td>
+                                <a href="#" class="text-primary fw-bold crf-link" data-idx="${idx}">${item.crfId}</a>
+                            </td>
+                            <td><span class="badge ${badgeCls} px-3 py-2">${badgeText}</span></td>
+                            <td>${item.subject}</td>
+                            <td>${item.releaseDate}</td>
+                            <td>${item.developer}</td>
+                            <td><span class="badge bg-info text-white">${item.tester}</span></td>
+                            <td>
+                                ${item.isConfirmed
+                        ? `<span class="badge ${getStatusBadge(item.workingStatus)} px-3 py-2">${item.workingStatus}</span>
+                                       <button class="btn btn-sm btn-warning ms-2 edit-btn" data-idx="${idx}">Edit</button>`
                         : `<select class="form-select form-select-sm status-select" data-idx="${idx}">
-                                            <option value="">-- Select Status --</option>
-                                            <option value="Working" ${item.workingStatus === 'Working' ? 'selected' : ''}>Working</option>
-                                            <option value="Not Working" ${item.workingStatus === 'Not Working' ? 'selected' : ''}>Not Working</option>
-                                            <option value="Partially Working" ${item.workingStatus === 'Partially Working' ? 'selected' : ''}>Partially Working</option>
-                                            <option value="In Progress" ${item.workingStatus === 'In Progress' ? 'selected' : ''}>In Progress</option>
-                                            <option value="On Hold" ${item.workingStatus === 'On Hold' ? 'selected' : ''}>On Hold</option>
-                                           </select>`
+                                        <option value="">-- Select Status --</option>
+                                        <option value="Working" ${item.workingStatus === 'Working' ? 'selected' : ''}>Working</option>
+                                        <option value="Not Working" ${item.workingStatus === 'Not Working' ? 'selected' : ''}>Not Working</option>
+                                        <option value="Partially Working" ${item.workingStatus === 'Partially Working' ? 'selected' : ''}>Partially Working</option>
+                                        <option value="In Progress" ${item.workingStatus === 'In Progress' ? 'selected' : ''}>In Progress</option>
+                                        <option value="On Hold" ${item.workingStatus === 'On Hold' ? 'selected' : ''}>On Hold</option>
+                                       </select>`
                     }
-                                    ${isConfirmed ? `<button class="btn btn-sm btn-warning ms-2 edit-btn" data-idx="${idx}"><i class="fas fa-edit"></i></button>` : ''}
-                                </td>
-
-                                <!-- Remarks -->
-                                <td>
-                                    <textarea class="form-control form-control-sm remarks-text" rows="3" maxlength="600"
-                                              placeholder="${isConfirmed ? 'Confirmed' : 'Enter remarks (required)'}"
-                                              ${isConfirmed ? 'readonly' : ''} data-idx="${idx}">${item.remarks || ''}</textarea>
-                                    <small class="text-muted d-block">${wordCount(item.remarks)} words</small>
-                                </td>
-
-                                <!-- Attachment -->
-                                <td>
-                                    ${!isConfirmed ? `<input type="file" class="form-control form-control-sm" accept=".pdf,.docx,.txt,image/*" data-idx="${idx}" />` : ''}
-                                    ${item.attachmentName ? `<a href="#" class="btn btn-sm btn-outline-primary download-btn" data-idx="${idx}">
-                                        <i class="fas fa-paperclip"></i> ${item.attachmentName}</a>` : ''}
-                                </td>
-
-                                <!-- Action -->
-                                <td>
-                                    <button class="btn btn-sm confirm-btn ${isConfirmed ? 'btn-success' : 'btn-primary'}"
-                                            data-idx="${idx}" ${isConfirmed ? 'disabled' : ''}>
-                                        ${isConfirmed ? 'Confirmed' : 'Confirm'}
-                                    </button>
-                                </td>
-                            `;
+                            </td>
+                            <td>
+                                <textarea class="form-control form-control-sm remarks-text" rows="2" data-idx="${idx}" ${item.isConfirmed ? 'readonly' : ''}>${item.remarks || ''}</textarea>
+                                <small class="text-muted d-block">${(item.remarks || '').trim().split(/\s+/).filter(w => w).length} words</small>
+                            </td>
+                            <td>
+                                ${!item.isConfirmed ? `<input type="file" class="form-control form-control-sm" data-idx="${idx}">` : ''}
+                                ${item.attachmentName ? `<a href="#" class="btn btn-sm btn-outline-primary download-btn" data-idx="${idx}"><i class="fas fa-paperclip"></i> ${item.attachmentName}</a>` : ''}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm ${item.isConfirmed ? 'btn-success' : 'btn-primary'} confirm-btn"
+                                        data-idx="${idx}" ${item.isConfirmed || !canConfirm ? 'disabled' : ''}>
+                                    ${item.isConfirmed ? '<i class="fas fa-check"></i> Confirmed' : '<i class="fas fa-save"></i> Confirm'}
+                                </button>
+                            </td>
+                        `;
                 tbody.appendChild(row);
             });
 
-            attachRowEvents();
-            updateAllConfirmButtons();
+            attachEvents();
         }
 
-        function attachRowEvents() {
-            document.querySelectorAll("tr").forEach(row => {
-                const idx = row.querySelector(".confirm-btn")?.dataset.idx;
-                if (!idx) return;
+        function attachEvents() {
+            document.getElementById("verificationBody").addEventListener("click", e => {
+                const idx = e.target.dataset.idx;
+                if (idx === undefined) return;
                 const item = verificationData[idx];
 
-                // Status Change
-                row.querySelector(".status-select")?.addEventListener("change", function () {
-                    item.workingStatus = this.value;
-                    updateConfirmButton(idx);
-                });
+                // Update status
+                if (e.target.classList.contains("status-select")) {
+                    item.workingStatus = e.target.value;
+                    renderTable(); // Re-render to update Confirm button
+                }
 
-                // Remarks Change
-                row.querySelector(".remarks-text")?.addEventListener("input", function () {
-                    item.remarks = this.value;
-                    this.nextElementSibling.textContent = wordCount(this.value) + " words";
-                    updateConfirmButton(idx);
-                });
+                // Update remarks
+                if (e.target.classList.contains("remarks-text")) {
+                    setTimeout(() => {
+                        item.remarks = e.target.value;
+                        e.target.nextElementSibling.textContent = (item.remarks || '').trim().split(/\s+/).filter(w => w).length + " words";
+                        renderTable(); // Update Confirm button
+                    }, 100);
+                }
 
-                // File Upload
-                row.querySelector("input[type=file]")?.addEventListener("change", function () {
-                    const file = this.files[0];
-                    if (file && file.size > 10 * 1024 * 1024) {
-                        alert("File must be ≤10MB");
-                        this.value = "";
-                    } else if (file) {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            item.attachmentBase64 = reader.result;
-                            item.attachmentName = file.name;
-                            renderTable();
-                        };
-                        reader.readAsDataURL(file);
-                    }
-                });
+                // File upload
+                if (e.target.type === "file" && e.target.files[0]) {
+                    const file = e.target.files[0];
+                    if (file.size > 10 * 1024 * 1024) { alert("Max 10MB"); e.target.value = ""; return; }
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        item.attachmentBase64 = reader.result;
+                        item.attachmentName = file.name;
+                        item.attachmentMime = file.type;
+                    };
+                    reader.readAsDataURL(file);
+                }
 
-                // Confirm Button
-                row.querySelector(".confirm-btn")?.addEventListener("click", () => {
-                    if (!item.workingStatus) return alert("Please select Working Status");
-                    if (!item.remarks?.trim()) return alert("Please enter Remarks");
-
-                    item.isConfirmed = true;
-                    item.confirmedOn = new Date().toISOString();
+                // Confirm
+                if (e.target.classList.contains("confirm-btn") && !e.target.disabled) {
                     saveItem(item);
-                    renderTable();
-                });
+                }
 
-                // Edit Button (After Confirm)
-                row.querySelector(".edit-btn")?.addEventListener("click", () => {
+                // Edit
+                if (e.target.classList.contains("edit-btn")) {
                     item.isConfirmed = false;
                     renderTable();
-                });
+                }
 
                 // Download
-                row.querySelector(".download-btn")?.addEventListener("click", e => {
+                if (e.target.classList.contains("download-btn")) {
                     e.preventDefault();
-                    const a = document.createElement('a');
-                    a.href = item.attachmentBase64;
-                    a.download = item.attachmentName;
-                    a.click();
-                });
+                    if (item.attachmentBase64) {
+                        const a = document.createElement("a");
+                        a.href = item.attachmentBase64;
+                        a.download = item.attachmentName;
+                        a.click();
+                    }
+                }
+
+                // History
+                if (e.target.classList.contains("crf-link")) {
+                    e.preventDefault();
+                    showHistoryModal(item.History, item.crfId, selectedReleaseType);
+                }
             });
-        }
-
-        function updateConfirmButton(idx) {
-            const item = verificationData[idx];
-            const btn = document.querySelector(`.confirm-btn[data-idx="${idx}"]`);
-            if (!btn) return;
-
-            const canConfirm = item.workingStatus && item.remarks?.trim();
-            btn.disabled = !canConfirm || item.isConfirmed;
-            btn.className = `btn btn-sm confirm-btn ${canConfirm && !item.isConfirmed ? 'btn-primary' : 'btn-secondary'}`;
-        }
-
-        function updateAllConfirmButtons() {
-            verificationData.forEach((_, idx) => updateConfirmButton(idx));
         }
 
         async function saveItem(item) {
             const token = localStorage.getItem('jwtToken');
-            const empName = localStorage.getItem('empName') || 'Unknown User';
+            const empName = localStorage.getItem('empName') || "Unknown User";
 
-            // Add new history entry BEFORE saving
-            const now = new Date();
-            const historyEntry = {
-                Employee: empName,
-                Status: item.workingStatus,
-                Remarks: item.remarks || '-',
-                DateTime: now.toLocaleString('en-GB', {
-                    day: '2-digit', month: 'short', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit', second: '2-digit'
-                })
-            };
-            // Initialize history array if not exists
-            if (!item.History) item.History = [];
-            item.History.push(historyEntry);
+            const payload = [{
+                crfId: item.crfId,
+                workingStatus: item.workingStatus,
+                remarks: item.remarks?.trim() || "",
+                attachmentName: item.attachmentName || null,
+                attachmentBase64: item.attachmentBase64 || null,
+                attachmentMime: item.attachmentMime || null,
+                verifiedBy: empName
+            }];
 
             try {
-                await fetch('/api/DailyVerification/Save', {
+                const res = await fetch('/api/DailyVerification/Save', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token
-                    },
-                    body: JSON.stringify([item])
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify(payload)
                 });
+
+                if (res.ok) {
+                    alert("Saved successfully!");
+                    item.isConfirmed = true;
+                    renderTable();
+                } else {
+                    alert("Save failed: " + await res.text());
+                }
             } catch (err) {
-                alert("Save failed, but history is kept locally");
+                alert("Error: " + err.message);
             }
         }
 
-        function getStatusClass(s) {
-            const map = { "Working": "bg-success", "Not Working": "bg-danger", "Partially Working": "bg-info", "In Progress": "bg-warning", "On Hold": "bg-secondary" };
-            return map[s] || "bg-secondary";
-        }
+        function showHistoryModal(history, crfId, type) {
+            const isDaily = type === "Daily Release Report";
+            const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
+            const badgeText = isDaily ? "Daily" : "Exp.";
 
-        function wordCount(str) { return (str || "").trim().split(/\s+/).filter(w => w).length; }
-        function formatDate(d) { return d ? new Date(d).toLocaleDateString('en-GB') : ''; }
-        document.getElementById("verificationBody").addEventListener("click", function (e) {
-            const link = e.target.closest(".crf-link");
-            if (!link) return;
-            e.preventDefault();
-            const item = JSON.parse(link.dataset.crf);
-
-            if (!item.History || item.History.length === 0) {
-                alert(`No history available for CRF ${item.crfId}`);
-                return;
-            }
-
-            // Create Modal
-            const modalHtml = `
-                                <div class="modal fade" id="crfHistoryModal" tabindex="-1">
-                                    <div class="modal-dialog modal-lg">
-                                        <div class="modal-content">
-                                            <div class="modal-header bg-primary text-white">
-                                                <h5 class="modal-title">
-                                                    CRF History: <strong>${item.crfId}</strong>
-                                                    ${item.subject ? ' - ' + item.subject : ''}
-                                                </h5>
-                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <div class="modal-body">
-                                                <div style="padding: 10px;">
-                                                    ${item.History.map((h, i) => {
-                const color = h.Status === "Working" ? "#28a745" :
-                    h.Status === "Not Working" ? "#dc3545" :
-                        h.Status === "In Progress" ? "#ffc107" :
-                            h.Status === "On Hold" ? "#6c757d" : "#17a2b8";
-
-                return `
-                                                            <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; font-size: 0.95rem;">
-                                                                <div style="width: 14px; height: 14px; border-radius: 50%; background: ${color}; flex-shrink: 0; margin-top: 4px;"></div>
-                                                                <div style="flex: 1;">
-                                                                    <div style="font-weight: bold; color: ${color};">${h.Status}</div>
-                                                                    <div style="margin: 2px 0; color: #2c3e50;"><strong>${h.Employee}</strong></div>
-                                                                    <div style="font-size: 0.85rem; color: #7f8c8d;">${h.DateTime}</div>
-                                                                    ${h.Remarks && h.Remarks !== '-'
-                        ? `<div style="margin-top: 8px; padding: 10px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid ${color}; font-size: 0.92rem;">
-                                                                               ${h.Remarks.replace(/\n/g, '<br>')}
-                                                                           </div>`
-                        : '<div style="color: #95a5a6; font-style: italic; margin-top: 4px;">No remarks</div>'
-                    }
-                                                                </div>
-                                                            </div>
-                                                            ${i < item.History.length - 1
-                        ? '<div style="margin-left: 7px; border-left: 2px dashed #bdc3c7; height: 30px;"></div>'
-                        : ''}
-                                                        `;
-            }).join('')}
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                            </div>
-                                        </div>
-                                    </div>
+            const rows = history.length === 0
+                ? `<p class="text-center text-muted">No history</p>`
+                : history.map(h => `
+                            <div class="d-flex gap-3 mb-3">
+                                <div><div class="bg-${h.Status === 'Working' ? 'success' : h.Status === 'Not Working' ? 'danger' : 'secondary'} text-white rounded-circle d-flex align-items-center justify-content-center" style="width:36px;height:36px;">${h.Status?.[0] || '?'}</div></div>
+                                <div>
+                                    <div class="fw-bold text-${h.Status === 'Working' ? 'success' : h.Status === 'Not Working' ? 'danger' : 'secondary'}">${h.Status}</div>
+                                    <div class="small text-muted">by <strong>${h.Employee}</strong> • ${h.DateTime}</div>
+                                    ${h.Remarks && h.Remarks !== '-' ? `<div class="mt-2 p-3 bg-light rounded border-start border-4 border-${h.Status === 'Working' ? 'success' : 'danger'}">${h.Remarks.replace(/\n/g, '<br>')}</div>` : '<em class="text-muted">No remarks</em>'}
+                                    ${h.Attachment ? `<div class="mt-2"><i class="fas fa-paperclip text-primary"></i> ${h.Attachment}</div>` : ''}
                                 </div>
-                            `;
+                            </div>
+                        `).join('');
 
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = new bootstrap.Modal(document.getElementById('crfHistoryModal'));
-            modal.show();
-
-            // Clean up after close
-            document.getElementById('crfHistoryModal').addEventListener('hidden.bs.modal', function () {
-                this.remove();
-            });
-        });
+            const modal = `
+                        <div class="modal fade" id="histModal" tabindex="-1">
+                            <div class="modal-dialog modal-lg"><div class="modal-content">
+                                <div class="modal-header bg-primary text-white">
+                                    <h5 class="modal-title">History: <strong>${crfId}</strong> <span class="ms-2 badge ${badgeCls}">${badgeText}</span></h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">${rows}</div>
+                                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+                            </div></div>
+                        </div>`;
+            document.body.insertAdjacentHTML('beforeend', modal);
+            new bootstrap.Modal(document.getElementById('histModal')).show();
+            document.getElementById('histModal').addEventListener('hidden.bs.modal', () => document.getElementById('histModal').remove());
+        }
     </script>
 
     <style>
@@ -393,6 +384,15 @@
 
         .confirm-btn:disabled {
             opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .crf-link:hover {
+            text-decoration: underline;
+        }
+
+        .badge {
+            font-size: 0.85rem;
         }
 
         .table th {

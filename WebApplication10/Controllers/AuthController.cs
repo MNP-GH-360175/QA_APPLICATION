@@ -25,54 +25,52 @@ namespace WebApplication10.Controllers
         public IActionResult Login([FromBody] LoginRequest request)
         {
             if (string.IsNullOrEmpty(request.EmpCode) || string.IsNullOrEmpty(request.Password))
-                return BadRequest("EmpCode and Password are required");
+                return BadRequest(new { message = "EmpCode and Password are required" });
 
-            using (var connection = new OracleConnection(_oracleConnectionString))
+            using var connection = new OracleConnection(_oracleConnectionString);
+            connection.Open();
+
+            const string query = "SELECT emp_code, emp_name, PASSWORD FROM EMPLOYEE_MASTER WHERE emp_code = :EmpCode";
+            using var cmd = new OracleCommand(query, connection);
+            cmd.Parameters.Add("EmpCode", OracleDbType.Varchar2).Value = request.EmpCode;
+
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read())
             {
-                connection.Open();
-                string query = "SELECT emp_code, emp_name, PASSWORD FROM EMPLOYEE_MASTER WHERE emp_code = :EmpCode";
-                using (var cmd = new OracleCommand(query, connection))
+                string dbPassword = reader["PASSWORD"]?.ToString() ?? "";
+                string empCode = reader["emp_code"]?.ToString() ?? "";
+                string empName = reader["emp_name"]?.ToString() ?? "Unknown User";
+
+                // Simple password check (upgrade to hashing later!)
+                if (dbPassword == request.Password)
                 {
-                    cmd.Parameters.Add(new OracleParameter("EmpCode", request.EmpCode));
-                    using (var reader = cmd.ExecuteReader())
+                    var token = GenerateJwtToken(empCode, empName);
+
+                    return Ok(new
                     {
-                        if (reader.Read())
-                        {
-                            string dbPassword = reader["PASSWORD"].ToString();
-                            if (dbPassword == request.Password) // Warning: Upgrade to hashing later!
-                            {
-                                string empCode = reader["emp_code"].ToString();
-                                string empName = reader["emp_name"].ToString();
-
-                                var token = GenerateJwtToken(empCode, empName); // Now passes name
-
-                                return Ok(new
-                                {
-                                    token,
-                                    empCode,
-                                    empName
-                                });
-                            }
-                        }
-                    }
+                        token,
+                        empName,     // THIS WAS THE FIX!
+                        empCode
+                    });
                 }
             }
-            return Unauthorized("Invalid credentials");
+
+            return Unauthorized(new { message = "Invalid EmpCode or Password" });
         }
 
-        // Updated GenerateJwtToken to include emp_name
         private string GenerateJwtToken(string empCode, string empName)
         {
             var jwtSettings = _configuration.GetSection("Jwt");
-            var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]);
+            var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 
             var claims = new List<Claim>
-    {
-        new Claim(ClaimTypes.Name, empCode),           // For User.Identity.Name
-        new Claim(ClaimTypes.GivenName, empName),      // For display name
-        new Claim(JwtRegisteredClaimNames.Sub, empCode),
-        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-    };
+            {
+                new Claim(ClaimTypes.NameIdentifier, empCode),
+                new Claim(ClaimTypes.Name, empCode),
+                new Claim(ClaimTypes.GivenName, empName),
+                new Claim(JwtRegisteredClaimNames.Sub, empCode),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -91,15 +89,14 @@ namespace WebApplication10.Controllers
         [HttpGet("dashboard")]
         public IActionResult Dashboard()
         {
-            return Ok(new { Message = "Welcome!", User = User.Identity.Name });
+            var empName = User.FindFirst(ClaimTypes.GivenName)?.Value ?? "User";
+            return Ok(new { Message = $"Welcome {empName}!", User = User.Identity?.Name });
         }
-
-
     }
 
     public class LoginRequest
     {
-        public string EmpCode { get; set; }
-        public string Password { get; set; }
+        public string EmpCode { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
     }
 }
