@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddControllersWithViews();
 
-// ✅ Add CORS before building the app
+// CORS - Allow your frontend (adjust in production!)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -17,9 +17,9 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader());
 });
 
-// ✅ JWT Authentication
+// JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]);
+var key = Encoding.UTF8.GetBytes(jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key not configured"));
 
 builder.Services.AddAuthentication(options =>
 {
@@ -35,26 +35,44 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings["Issuer"],
-        IssuerSigningKey = new SymmetricSecurityKey(key)
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ClockSkew = TimeSpan.FromMinutes(5) // Grace period for clock drift
+    };
+
+    // Optional: Show detailed errors in development
+    options.Events = new JwtBearerEvents
+    {
+        OnAuthenticationFailed = context =>
+        {
+            context.NoResult();
+            context.Response.StatusCode = 401;
+            context.Response.ContentType = "text/plain";
+            return context.Response.WriteAsync("Token validation failed: " + context.Exception.Message);
+        }
     };
 });
 
 var app = builder.Build();
 
-// ✅ Middleware pipeline
+// Middleware pipeline - ORDER MATTERS!
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Home/Error");
+    app.UseHsts();
+}
+
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
 
-// ✅ Enable CORS before Authentication
+// CORS MUST come before Authentication/Authorization
 app.UseCors("AllowAll");
 
-app.UseAuthentication();
-app.UseAuthorization();
+app.UseAuthentication();  // Validates JWT
+app.UseAuthorization();   // Applies [Authorize] attributes
 
 app.MapControllers();
-
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Login}/{id?}");
