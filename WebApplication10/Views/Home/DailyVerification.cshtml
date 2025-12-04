@@ -4,9 +4,7 @@
 }
 
 <div class="container-fluid mt-4">
-    <h3 class="mb-4 text-primary">
-        Daily Release Verification
-    </h3>
+    <h3 class="mb-4 text-primary">Daily Release Verification</h3>
 
     <!-- Filters -->
     <div class="card shadow-sm border-0 mb-4">
@@ -18,7 +16,7 @@
                         <select class="form-select" id="releaseType" required>
                             <option value="">-- Select Type --</option>
                             <option value="Daily Release Report">Daily Release Report</option>
-                            <option value="Exceptional and Expedite Report">Exceptional & Expedite</option>
+                            <option value="Exceptional & Expedite Report">Exceptional & Expedite</option>
                         </select>
                         <div class="invalid-feedback">Required</div>
                     </div>
@@ -35,19 +33,17 @@
                     <div class="col-md-2">
                         <label class="form-label fw-bold">Tester TL</label>
                         <select class="form-select" id="testerTL">
-                            <option value="">Loading TLs...</option>
+                            <option value="">All TLs</option>
                         </select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label fw-bold">Tester Name</label>
                         <select class="form-select" id="testerName">
-                            <option value="">Loading Testers...</option>
+                            <option value="">All Testers</option>
                         </select>
                     </div>
                     <div class="col-md-1">
-                        <button type="submit" class="btn btn-primary w-100">
-                            Search
-                        </button>
+                        <button type="submit" class="btn btn-primary w-100">Search</button>
                     </div>
                 </div>
             </form>
@@ -96,71 +92,68 @@
             "User feedback pending"
         ];
 
+        const STATUS_MAP = {
+            1: "Working",
+            2: "Not Working",
+            3: "In Progress",
+            4: "Data need to capture",
+            5: "User feedback pending"
+        };
+
+        function getStatusText(code) {
+            return STATUS_MAP[code] || "Unknown";
+        }
         let verificationData = [];
 
-        // Load TL & Tester dropdowns from API
+        // Case-insensitive proxy to handle Oracle's random column casing
+        const normalizeKeys = obj => new Proxy(obj, {
+            get(target, prop) {
+                if (prop in target) return target[prop];
+                const upper = prop.toUpperCase();
+                const found = Object.keys(target).find(k => k.toUpperCase() === upper);
+                return found ? target[found] : undefined;
+            }
+        });
+
         async function loadFilterDropdowns() {
             try {
                 const token = localStorage.getItem('jwtToken');
                 const res = await fetch('/api/DailyVerification/filters', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
-
                 if (!res.ok) throw new Error("Failed to load filters");
-
                 const data = await res.json();
 
-                // Populate Tester TL
                 const tlSelect = document.getElementById("testerTL");
                 tlSelect.innerHTML = '<option value="">All TLs</option>';
-                data.testerTLs?.forEach(x => {
-                    const opt = document.createElement("option");
-                    opt.value = x.value;
-                    opt.textContent = x.text;
-                    tlSelect.appendChild(opt);
-                });
+                data.testerTLs?.forEach(x => tlSelect.add(new Option(x.text, x.value)));
 
-                // Populate Tester Name
                 const testerSelect = document.getElementById("testerName");
                 testerSelect.innerHTML = '<option value="">All Testers</option>';
-                data.testerNames?.forEach(x => {
-                    const opt = document.createElement("option");
-                    opt.value = x.value;
-                    opt.textContent = x.text;
-                    testerSelect.appendChild(opt);
-                });
-
+                data.testerNames?.forEach(x => testerSelect.add(new Option(x.text, x.value)));
             } catch (err) {
                 console.error("Failed to load dropdowns:", err);
-                document.getElementById("testerTL").innerHTML = '<option value="">Error loading TLs</option>';
-                document.getElementById("testerName").innerHTML = '<option value="">Error loading Testers</option>';
             }
         }
 
         function formatDateForOracle(dateStr) {
+            if (!dateStr) return "";
             const d = new Date(dateStr);
             const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
             return `${String(d.getDate()).padStart(2, '0')}-${months[d.getMonth()]}-${d.getFullYear()}`;
         }
 
-        function getStatusBadge(status) {
-            const map = {
-                "Working": "bg-success text-white",
-                "Not Working": "bg-danger text-white",
-                "In Progress": "bg-warning text-dark",
-                "Data need to capture": "bg-info text-white",
-                "User feedback pending": "bg-secondary text-white"
-            };
-            return map[status] || "bg-secondary text-white";
+        function getStatusText(code) {
+            return STATUS_MAP[code] || "";
         }
 
-        // Search
+        // Main Search
         document.getElementById("filterForm").addEventListener("submit", async e => {
             e.preventDefault();
 
             let valid = true;
             document.querySelectorAll("#filterForm [required]").forEach(el => {
-                if (!el.value.trim()) {
+                if (!el.value) {
                     el.classList.add("is-invalid");
                     valid = false;
                 } else {
@@ -178,7 +171,6 @@
             };
 
             const token = localStorage.getItem('jwtToken');
-
             try {
                 const res = await fetch('/api/DailyVerification', {
                     method: 'POST',
@@ -191,39 +183,45 @@
 
                 if (!res.ok) throw new Error(await res.text());
 
-                verificationData = await res.json();
+                verificationData = (await res.json()).map(item => normalizeKeys(item));
 
-                // Map API response to clean properties
+                // Map data to clean properties
                 verificationData.forEach(item => {
-                    item.crfId = (item.crF_ID || item.CRF_ID || "N/A").toString().trim();
-                    item.requestId = (item.requesT_ID || item.REQUEST_ID || "").toString().trim();
-                    item.subject = (item.crF_NAME || item.CRF_NAME || "Not Available").trim();
-                    item.releaseDate = item.releasE_DATE || item.RELEASE_DATE || "";
-                    item.techlead = (item.techleaD_NAME || item.TECHLEAD_NAME || "Not Assigned");
-                    item.developer = (item.developeR_NAME || item.DEVELOPER_NAME || "Not Assigned");
-                    item.tester = (item.testeR_NAME || item.TESTER_NAME || "Not Assigned");
-                    item.testerTL = (item.testeR_TL_NAME || item.TESTER_TL_NAME || "Not Assigned");
-                    item.releaseTypeText = (item.releasE_TYPE_TEXT || item.RELEASE_TYPE_TEXT || "");
+                    item.crfId = item.CRF_ID || "N/A";
+                    item.requestId = item.REQUEST_ID || "";
+                    item.subject = item.CRF_NAME || "Unknown CRF";
+                    item.releaseDate = item.RELEASE_DATE || "";
+                    item.techlead = item.TECHLEAD_NAME || "Not Assigned";
+                    item.developer = item.DEVELOPER_NAME || "Not Assigned";
+                    item.tester = item.TESTER_NAME || "Not Assigned";
+                    item.testerTL = item.TESTER_TL_NAME || "Not Assigned";
+                    item.releaseTypeText = item.RELEASE_TYPE || "";
 
-                    const verifiedToday = item.currenT_VERIFIED_ON &&
-                        new Date(item.currenT_VERIFIED_ON).toDateString() === new Date().toDateString();
+                    const statusCode = item.WORKING_STATUS ? Number(item.WORKING_STATUS) : null;
+                    const verifiedToday = item.VERIFIED_ON &&
+                        new Date().toDateString() === new Date(item.VERIFIED_ON).toDateString();
 
-                    if (verifiedToday && item.currenT_STATUS) {
-                        item.workingStatus = item.currenT_STATUS;
-                        item.remarks = item.currenT_REMARKS || "";
-                        item.attachmentName = item.currenT_ATTACHMENT_NAME || "";
+                    if (verifiedToday && statusCode) {
+                        item.workingStatus = getStatusText(statusCode);
+                        item.remarks = item.REMARKS || "";
+                        item.attachmentName = item.ATTACHMENT_NAME || "";
+                        item.verifiedBy = item.VERIFIED_BY || "";
+                        item.verifiedOn = item.VERIFIED_ON || "";
                         item.isConfirmed = true;
                     } else {
                         item.workingStatus = "";
                         item.remarks = "";
                         item.attachmentName = "";
-                        item.attachmentBase64 = null;
+                        item.verifiedBy = "";
+                        item.verifiedOn = "";
                         item.isConfirmed = false;
                     }
 
                     try {
-                        item.History = JSON.parse(item.historY_JSON || item.HISTORY_JSON || "[]");
-                    } catch { item.History = []; }
+                        item.History = JSON.parse(item.HISTORY_JSON || "[]");
+                    } catch {
+                        item.History = [];
+                    }
                 });
 
                 document.getElementById("resultCard").style.display = verificationData.length ? "block" : "none";
@@ -243,7 +241,7 @@
                 const isDaily = item.releaseTypeText.includes("Daily");
                 const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
                 const badgeText = isDaily ? "Daily" : "Exp.";
-                const canConfirm = item.workingStatus && item.remarks?.trim();
+                const canConfirm = !!item.workingStatus && !!(item.remarks || "").trim();
 
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
@@ -255,34 +253,26 @@
                         <td><strong>${item.techlead}</strong></td>
                         <td>${item.developer}</td>
                         <td>${item.tester}</td>
-                                <td>
-            ${item.isConfirmed
-                        ? `<span class="badge ${getStatusBadge(item.workingStatus)} px-3 py-2">${item.workingStatus}</span>
-                   <button class="btn btn-sm btn-outline-warning ms-2 edit-btn" data-idx="${idx}">Edit</button>`
+                        <td>
+                            ${item.isConfirmed
+                        ? `<span class="badge bg-success px-3 py-2">${item.workingStatus}</span>
+                                   <button class="btn btn-sm btn-outline-warning ms-2 edit-btn" data-idx="${idx}">Edit</button>`
                         : `<select class="form-select form-select-sm status-select" data-idx="${idx}">
-                    <option value="">-- Select Status --</option>
-                    ${STATUS_OPTIONS.map(opt =>
-                            `<option value="${opt}" ${item.workingStatus === opt ? 'selected' : ''}>${opt}</option>`
-                        ).join('')}
-                   </select>`
+                                       <option value="">-- Select --</option>
+                                       ${STATUS_OPTIONS.map(opt => `<option value="${opt}" ${item.workingStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                                   </select>`
                     }
-        </td>
+                        </td>
                         <td>
                             <textarea class="form-control form-control-sm remarks-text" rows="2" data-idx="${idx}" ${item.isConfirmed ? 'readonly' : ''}>${item.remarks || ''}</textarea>
-                            <small class="text-muted d-block">${(item.remarks || '').trim().split(/\s+/).filter(w => w).length} words</small>
+                            <small class="text-muted d-block word-count">${(item.remarks || '').trim().split(/\s+/).filter(w => w).length} words</small>
                         </td>
                         <td>
-                            ${!item.isConfirmed
-                        ? `<input type="file" class="form-control form-control-sm file-input" data-idx="${idx}" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt">`
-                        : ''
-                    }
-                            ${item.attachmentName
-                        ? `<a href="#" class="text-primary download-link" data-idx="${idx}"> ${item.attachmentName}</a>`
-                        : ''
-                    }
+                            ${!item.isConfirmed ? `<input type="file" class="form-control form-control-sm file-input" data-idx="${idx}">` : ''}
+                            ${item.attachmentName ? `<a href="#" class="text-primary download-link" data-idx="${idx}">${item.attachmentName}</a>` : ''}
                         </td>
                         <td>
-                            <button class="btn btn-sm ${item.isConfirmed ? 'btn-success' : 'btn-primary'} confirm-btn"
+                            <button class="btn btn-sm ${item.isConfirmed ? 'btn-success' : (canConfirm ? 'btn-primary' : 'btn-secondary')} confirm-btn"
                                     data-idx="${idx}" ${item.isConfirmed || !canConfirm ? 'disabled' : ''}>
                                 ${item.isConfirmed ? 'Confirmed' : 'Confirm'}
                             </button>
@@ -295,82 +285,53 @@
         }
 
         function attachEvents() {
-            document.getElementById("verificationBody").onclick = e => {
+            const tbody = document.getElementById("verificationBody");
+
+            tbody.addEventListener("change", e => {
+                if (e.target.classList.contains("status-select")) {
+                    const idx = e.target.dataset.idx;
+                    verificationData[idx].workingStatus = e.target.value;
+                    updateConfirmButton(idx);
+                }
+            });
+
+            tbody.addEventListener("input", e => {
+                if (e.target.classList.contains("remarks-text")) {
+                    const idx = e.target.dataset.idx;
+                    verificationData[idx].remarks = e.target.value;
+                    const words = (e.target.value || "").trim().split(/\s+/).filter(w => w).length;
+                    e.target.nextElementSibling.textContent = words + " words";
+                    updateConfirmButton(idx);
+                }
+            });
+
+            tbody.onclick = e => {
                 const idx = e.target.dataset.idx;
                 if (idx === undefined) return;
                 const item = verificationData[idx];
-                const row = e.target.closest("tr");
 
-                // Status change — DO NOT re-render whole table!
-                if (e.target.classList.contains("status-select")) {
-                    item.workingStatus = e.target.value;
-                    const remarks = row.querySelector(".remarks-text").value.trim();
-                    const confirmBtn = row.querySelector(".confirm-btn");
-                    confirmBtn.disabled = !(item.workingStatus && remarks);
-                    return;
-                }
-
-                // Remarks change
-                if (e.target.classList.contains("remarks-text")) {
-                    setTimeout(() => {
-                        item.remarks = e.target.value;
-                        const status = row.querySelector(".status-select")?.value || "";
-                        const confirmBtn = row.querySelector(".confirm-btn");
-                        confirmBtn.disabled = !(status && item.remarks.trim());
-                    }, 100);
-                    return;
-                }
-
-                // File upload
-                if (e.target.classList.contains("file-input") && e.target.files[0]) {
-                    const file = e.target.files[0];
-                    if (file.size > 10 * 1024 * 1024) {
-                        alert("Max 10MB allowed");
-                        e.target.value = "";
-                        return;
-                    }
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        item.attachmentBase64 = reader.result;
-                        item.attachmentName = file.name;
-                        item.attachmentMime = file.type;
-                        renderTable(); // Only re-render on file upload
-                    };
-                    reader.readAsDataURL(file);
-                    return;
-                }
-
-                // Confirm
                 if (e.target.classList.contains("confirm-btn") && !e.target.disabled) {
                     saveItem(item);
-                    return;
                 }
-
-                // Edit
                 if (e.target.classList.contains("edit-btn")) {
                     item.isConfirmed = false;
                     renderTable();
-                    return;
                 }
-
-                // Download
-                if (e.target.classList.contains("download-link")) {
-                    e.preventDefault();
-                    if (item.attachmentBase64) {
-                        const a = document.createElement("a");
-                        a.href = item.attachmentBase64;
-                        a.download = item.attachmentName;
-                        a.click();
-                    }
-                    return;
-                }
-
-                // History
                 if (e.target.classList.contains("crf-link")) {
                     e.preventDefault();
                     showHistoryModal(item.History, item.crfId, item.releaseTypeText);
                 }
             };
+        }
+
+        function updateConfirmButton(idx) {
+            const item = verificationData[idx];
+            const row = document.querySelector(`[data-idx="${idx}"]`).closest("tr");
+            const btn = row.querySelector(".confirm-btn");
+            const can = !!item.workingStatus && !!(item.remarks || "").trim();
+            btn.disabled = !can;
+            btn.className = `btn btn-sm ${can ? 'btn-primary' : 'btn-secondary'} confirm-btn`;
+            btn.textContent = item.isConfirmed ? 'Confirmed' : 'Confirm';
         }
 
         async function saveItem(item) {
@@ -397,8 +358,7 @@
 
                 if (res.ok) {
                     alert("Saved successfully!");
-                    item.isConfirmed = true;
-                    renderTable();
+                    document.getElementById("filterForm").dispatchEvent(new Event("submit"));
                 } else {
                     alert("Save failed: " + await res.text());
                 }
@@ -413,20 +373,25 @@
             const badgeText = isDaily ? "Daily" : "Exp.";
 
             const rows = history.length === 0
-                ? `<p class="text-center text-muted">No history</p>`
+                ? `<p class="text-center text-muted my-4">No history</p>`
                 : history.map(h => `
-                        <div class="d-flex gap-3 mb-3">
-                            <div><div class="bg-${h.Status === 'Working' ? 'success' : 'danger'} text-white rounded-circle d-flex align-items-center justify-content-center" style="width:36px;height:36px;">${h.Status?.[0] || '?'}</div></div>
-                            <div>
-                                <div class="fw-bold text-${h.Status === 'Working' ? 'success' : 'danger'}">${h.Status}</div>
-                                <div class="small text-muted">by <strong>${h.Employee}</strong> • ${h.DateTime}</div>
-                                ${h.Remarks ? `<div class="mt-2 p-3 bg-light rounded border-start border-4 border-${h.Status === 'Working' ? 'success' : 'danger'}">${h.Remarks.replace(/\n/g, '<br>')}</div>` : '<em>No remarks</em>'}
-                                ${h.Attachment ? `<div class="mt-2"> ${h.Attachment}</div>` : ''}
+                        <div class="d-flex gap-3 mb-3 pb-3 border-bottom">
+                            <div class="flex-shrink-0">
+                                <div class="bg-${h.text === 'Working' ? 'success' : 'danger'} text-white rounded-circle d-flex align-items-center justify-content-center" style="width:40px;height:40px;font-size:18px;">
+                                    ${h.text?.[0] || '?'}
+                                </div>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-bold text-${h.text === 'Working' ? 'success' : 'danger'}">${h.text || 'Unknown'}</div>
+                                <div class="small text-muted">by <strong>${h.by || 'Unknown'}</strong> • ${h.at || ''}</div>
+                                ${h.note ? `<div class="mt-2 p-3 bg-light rounded">${h.note.replace(/\n/g, '<br>')}</div>` : '<em class="text-muted">No remarks</em>'}
+                                ${h.file ? `<div class="mt-2"><span class="badge bg-info">${h.file}</span></div>` : ''}
                             </div>
                         </div>
                     `).join('');
 
-            const modal = `
+            const modal = document.createElement('div');
+            modal.innerHTML = `
                     <div class="modal fade" id="histModal" tabindex="-1">
                         <div class="modal-dialog modal-lg">
                             <div class="modal-content">
@@ -434,19 +399,17 @@
                                     <h5 class="modal-title">History: <strong>${crfId}</strong> <span class="badge ${badgeCls} ms-2">${badgeText}</span></h5>
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                 </div>
-                                <div class="modal-body">${rows}</div>
+                                <div class="modal-body pt-4">${rows}</div>
                                 <div class="modal-footer">
                                     <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                                 </div>
                             </div>
                         </div>
                     </div>`;
-            document.body.insertAdjacentHTML('beforeend', modal);
+            document.body.appendChild(modal.firstElementChild);
             new bootstrap.Modal('#histModal').show();
-            document.getElementById('histModal').addEventListener('hidden.bs.modal', () => document.getElementById('histModal').remove());
         }
 
-        // Load dropdowns when page loads
         document.addEventListener("DOMContentLoaded", loadFilterDropdowns);
     </script>
 
@@ -462,10 +425,6 @@
 
         .crf-link:hover {
             text-decoration: underline;
-        }
-
-        .table th {
-            font-weight: 600;
         }
 
         textarea[readonly] {

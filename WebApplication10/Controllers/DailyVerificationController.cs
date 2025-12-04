@@ -40,37 +40,44 @@ namespace WebApplication10.Controllers
                 CommandType = CommandType.StoredProcedure
             };
 
-            cmd.Parameters.Add("p_from_date", OracleDbType.Date).Value = DateTime.ParseExact(filters.fromDate, "dd-MMM-yyyy", CultureInfo.InvariantCulture);
-            cmd.Parameters.Add("p_to_date", OracleDbType.Date).Value = DateTime.ParseExact(filters.toDate, "dd-MMM-yyyy", CultureInfo.InvariantCulture);
+            var fromDate = DateTime.ParseExact(filters.fromDate, "dd-MMM-yyyy", CultureInfo.InvariantCulture);
+            var toDate = DateTime.ParseExact(filters.toDate, "dd-MMM-yyyy", CultureInfo.InvariantCulture);
+
+            cmd.Parameters.Add("p_from_date", OracleDbType.Date).Value = fromDate;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Date).Value = toDate;
             cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = filters.releaseType ?? (object)DBNull.Value;
             cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = filters.testerTL ?? (object)DBNull.Value;
             cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = filters.testerName ?? (object)DBNull.Value;
             cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
 
             using var rdr = await cmd.ExecuteReaderAsync();
+
             while (await rdr.ReadAsync())
             {
                 list.Add(new
                 {
-                    CRF_ID = rdr["CRF_ID"]?.ToString() ?? "",
-                    REQUEST_ID = rdr["REQUEST_ID"]?.ToString() ?? "",
-                    CRF_NAME = rdr["CRF_NAME"]?.ToString() ?? "No Title",
-                    RELEASE_DATE = rdr["RELEASE_DATE"]?.ToString() ?? "",
-                    TECHLEAD_NAME = rdr["TECHLEAD_NAME"]?.ToString() ?? "Not Assigned",
-                    DEVELOPER_NAME = rdr["DEVELOPER_NAME"]?.ToString() ?? "Not Assigned",
-                    TESTER_NAME = rdr["TESTER_NAME"]?.ToString() ?? "Not Assigned",
-                    TESTER_TL_NAME = rdr["TESTER_TL_NAME"]?.ToString() ?? "Not Assigned",
-                    RELEASE_TYPE_TEXT = rdr["RELEASE_TYPE_TEXT"]?.ToString() ?? "",
-                    CURRENT_STATUS = rdr["CURRENT_STATUS"]?.ToString(),
-                    CURRENT_REMARKS = rdr["CURRENT_REMARKS"]?.ToString(),
-                    CURRENT_ATTACHMENT_NAME = rdr["CURRENT_ATTACHMENT_NAME"]?.ToString(),
-                    CURRENT_VERIFIED_ON = rdr["CURRENT_VERIFIED_ON"]?.ToString(),
-                    HISTORY_JSON = rdr["HISTORY_JSON"]?.ToString() ?? "[]"
+                    CRF_ID = rdr.GetStringOrDefault("CRF_ID", "N/A"),
+                    REQUEST_ID = rdr.GetStringOrDefault("REQUEST_ID", ""),
+                    CRF_NAME = rdr.GetStringOrDefault("CRF_NAME", "Unknown CRF"),
+                    RELEASE_DATE = rdr.GetStringOrDefault("RELEASE_DATE", ""),
+                    TECHLEAD_NAME = rdr.GetStringOrDefault("TECHLEAD_NAME", "Not Assigned"),
+                    DEVELOPER_NAME = rdr.GetStringOrDefault("DEVELOPER_NAME", "Not Assigned"),
+                    TESTER_NAME = rdr.GetStringOrDefault("TESTER_NAME", "Not Assigned"),
+                    TESTER_TL_NAME = rdr.GetStringOrDefault("TESTER_TL_NAME", "Not Assigned"),
+                    RELEASE_TYPE = rdr.GetStringOrDefault("RELEASE_TYPE", ""),
+
+                    WORKING_STATUS = rdr.GetStringOrDefault("WORKING_STATUS"),
+                    REMARKS = rdr.GetStringOrDefault("REMARKS", ""),
+                    ATTACHMENT_NAME = rdr.GetStringOrDefault("ATTACHMENT_NAME", ""),
+                    VERIFIED_BY = rdr.GetStringOrDefault("VERIFIED_BY", ""),
+                    VERIFIED_ON = rdr.GetStringOrDefault("VERIFIED_ON", ""),
+                    HISTORY_JSON = rdr.GetStringOrDefault("HISTORY_JSON", "[]")
                 });
             }
+
             return Ok(list);
         }
-
+       
         [HttpPost("Save")]
         public async Task<IActionResult> Save([FromBody] List<SaveModel> items)
         {
@@ -151,5 +158,13 @@ namespace WebApplication10.Controllers
         public string? attachmentName { get; set; }
         public string? attachmentBase64 { get; set; }
         public string? attachmentMime { get; set; }
+    }
+}
+public static class OracleReaderExtensions
+{
+    public static string GetStringOrDefault(this OracleDataReader reader, string columnName, string defaultValue = "")
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.IsDBNull(ordinal) ? defaultValue : reader.GetString(ordinal).Trim();
     }
 }
