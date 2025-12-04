@@ -33,23 +33,7 @@ namespace WebApplication10.Controllers
         [AllowAnonymous]
         public IActionResult DailyVerification()
         {
-            ViewBag.TesterTLs = new List<SelectListItem>
-    {
-        new SelectListItem { Text = "NIKHIL SEKHAR", Value = "NIKHIL SEKHAR" },
-        new SelectListItem { Text = "VISAGH S", Value = "VISAGH S" },
-        new SelectListItem { Text = "JIJIN E H", Value = "JIJIN E H" },
-        new SelectListItem { Text = "MURUGESAN P", Value = "MURUGESAN P" }
-    };
-
-            ViewBag.TesterNames = new List<SelectListItem>
-    {
-        new SelectListItem { Text = "Rajendran N", Value = "Rajendran N" },
-        new SelectListItem { Text = "Aditya T S", Value = "Aditya T S" },
-        new SelectListItem { Text = "Anjitha K A", Value = "Anjitha K A" },
-        new SelectListItem { Text = "Aswathy Chandran", Value = "Aswathy Chandran" },
-        new SelectListItem { Text = "Kala Chandran", Value = "Kala Chandran" },
-        new SelectListItem { Text = "Seethal V S", Value = "Seethal V S" }
-    };
+           
 
             return View();
         }
@@ -57,23 +41,8 @@ namespace WebApplication10.Controllers
         [AllowAnonymous]
         public IActionResult ReleaseStatus()
         {
-            ViewBag.TesterTLs = new List<SelectListItem>
-    {
-        new SelectListItem { Text = "NIKHIL SEKHAR", Value = "NIKHIL SEKHAR" },
-        new SelectListItem { Text = "VISAGH S", Value = "VISAGH S" },
-        new SelectListItem { Text = "JIJIN E H", Value = "JIJIN E H" },
-        new SelectListItem { Text = "MURUGESAN P", Value = "MURUGESAN P" }
-    };
-
-            ViewBag.TesterNames = new List<SelectListItem>
-    {
-        new SelectListItem { Text = "Rajendran N", Value = "Rajendran N" },
-        new SelectListItem { Text = "Aditya T S", Value = "Aditya T S" },
-        new SelectListItem { Text = "Anjitha K A", Value = "Anjitha K A" },
-        new SelectListItem { Text = "Aswathy Chandran", Value = "Aswathy Chandran" },
-        new SelectListItem { Text = "Kala Chandran", Value = "Kala Chandran" },
-        new SelectListItem { Text = "Seethal V S", Value = "Seethal V S" }
-    };
+           
+    
 
             return View();
         }
