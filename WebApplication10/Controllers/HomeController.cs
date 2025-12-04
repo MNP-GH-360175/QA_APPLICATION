@@ -38,8 +38,8 @@ namespace WebApplication10.Controllers
         [AllowAnonymous]
         public IActionResult DailyVerification()
         {
-            ViewBag.TesterTLs = GetTesterTLs();
-            ViewBag.TesterNames = GetTesterNames();
+           
+
             return View();
         }
 
