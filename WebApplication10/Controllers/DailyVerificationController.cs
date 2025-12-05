@@ -4,8 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using Oracle.ManagedDataAccess.Client;
 using System.Data;
 using Newtonsoft.Json;
-using System.Globalization;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
 namespace WebApplication10.Controllers
@@ -24,6 +22,7 @@ namespace WebApplication10.Controllers
             _connStr = _config.GetConnectionString("OracleConnection");
         }
 
+        // FETCH: Get all CRFs with verification status
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] FilterModel filters)
         {
@@ -35,71 +34,113 @@ namespace WebApplication10.Controllers
             using var conn = new OracleConnection(_connStr);
             await conn.OpenAsync();
 
-            using var cmd = new OracleCommand("proc_daily_release_verification", conn)
+            using var cmd = new OracleCommand("PROC_DAILY_VERIFICATION_MASTER", conn)
             {
                 CommandType = CommandType.StoredProcedure
             };
 
-            var fromDate = DateTime.ParseExact(filters.fromDate, "dd-MMM-yyyy", CultureInfo.InvariantCulture);
-            var toDate = DateTime.ParseExact(filters.toDate, "dd-MMM-yyyy", CultureInfo.InvariantCulture);
-
-            cmd.Parameters.Add("p_from_date", OracleDbType.Date).Value = fromDate;
-            cmd.Parameters.Add("p_to_date", OracleDbType.Date).Value = toDate;
+            cmd.Parameters.Add("p_flag", OracleDbType.Varchar2).Value = "FETCH";
+            cmd.Parameters.Add("p_from_date", OracleDbType.Varchar2).Value = filters.fromDate;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Varchar2).Value = filters.toDate;
             cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = filters.releaseType ?? (object)DBNull.Value;
             cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = filters.testerTL ?? (object)DBNull.Value;
             cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = filters.testerName ?? (object)DBNull.Value;
+            cmd.Parameters.Add("p_json_input", OracleDbType.Clob).Value = DBNull.Value;
+            cmd.Parameters.Add("p_updated_by", OracleDbType.Varchar2).Value = DBNull.Value;
             cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
 
             using var rdr = await cmd.ExecuteReaderAsync();
-
             while (await rdr.ReadAsync())
             {
                 list.Add(new
                 {
-                    CRF_ID = rdr.GetStringOrDefault("CRF_ID", "N/A"),
-                    REQUEST_ID = rdr.GetStringOrDefault("REQUEST_ID", ""),
-                    CRF_NAME = rdr.GetStringOrDefault("CRF_NAME", "Unknown CRF"),
-                    RELEASE_DATE = rdr.GetStringOrDefault("RELEASE_DATE", ""),
-                    TECHLEAD_NAME = rdr.GetStringOrDefault("TECHLEAD_NAME", "Not Assigned"),
-                    DEVELOPER_NAME = rdr.GetStringOrDefault("DEVELOPER_NAME", "Not Assigned"),
-                    TESTER_NAME = rdr.GetStringOrDefault("TESTER_NAME", "Not Assigned"),
-                    TESTER_TL_NAME = rdr.GetStringOrDefault("TESTER_TL_NAME", "Not Assigned"),
-                    RELEASE_TYPE = rdr.GetStringOrDefault("RELEASE_TYPE", ""),
-
-                    WORKING_STATUS = rdr.GetStringOrDefault("WORKING_STATUS"),
-                    REMARKS = rdr.GetStringOrDefault("REMARKS", ""),
-                    ATTACHMENT_NAME = rdr.GetStringOrDefault("ATTACHMENT_NAME", ""),
-                    VERIFIED_BY = rdr.GetStringOrDefault("VERIFIED_BY", ""),
-                    VERIFIED_ON = rdr.GetStringOrDefault("VERIFIED_ON", ""),
-                    HISTORY_JSON = rdr.GetStringOrDefault("HISTORY_JSON", "[]")
+                    CRF_ID = rdr["CRF_ID"]?.ToString() ?? "N/A",
+                    REQUEST_ID = rdr["REQUEST_ID"]?.ToString() ?? "",
+                    CRF_NAME = rdr["CRF_NAME"]?.ToString() ?? "Unknown CRF",
+                    RELEASE_DATE = rdr["RELEASE_DATE"]?.ToString() ?? "",
+                    TECHLEAD_NAME = rdr["TECHLEAD_NAME"]?.ToString() ?? "",
+                    DEVELOPER_NAME = rdr["DEVELOPER_NAME"]?.ToString() ?? "",
+                    TESTER_NAME = rdr["TESTER_NAME"]?.ToString() ?? "",
+                    TESTER_TL_NAME = rdr["TESTER_TL_NAME"]?.ToString() ?? "",
+                    RELEASE_TYPE = rdr["RELEASE_TYPE"]?.ToString() ?? "",
+                    WORKING_STATUS = rdr["WORKING_STATUS"]?.ToString() ?? "",
+                    REMARKS = rdr["REMARKS"]?.ToString() ?? "",
+                    ATTACHMENT_NAME = rdr["ATTACHMENT_NAME"]?.ToString() ?? "",
+                    VERIFIED_BY = rdr["VERIFIED_BY"]?.ToString() ?? "",
+                    VERIFIED_ON = rdr["VERIFIED_ON"]?.ToString() ?? "",
+                    HISTORY_JSON = rdr["HISTORY_JSON"]?.ToString() ?? "[]"
                 });
             }
 
             return Ok(list);
         }
-       
+
+        // SAVE: Save verification + insert into history table
         [HttpPost("Save")]
         public async Task<IActionResult> Save([FromBody] List<SaveModel> items)
         {
-            if (items == null || items.Count == 0) return BadRequest("No data");
+            if (items == null || items.Count == 0)
+                return BadRequest("No data to save");
 
             var userName = User.FindFirst(ClaimTypes.GivenName)?.Value ??
-                          User.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown";
+                           User.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown User";
 
             using var conn = new OracleConnection(_connStr);
             await conn.OpenAsync();
 
-            using var cmd = new OracleCommand("PROC_DAILY_VERIFICATION", conn)
+            // 1. Call master procedure to save in main table
+            using var cmd = new OracleCommand("PROC_DAILY_VERIFICATION_MASTER", conn)
             {
                 CommandType = CommandType.StoredProcedure
             };
 
+            cmd.Parameters.Add("p_flag", OracleDbType.Varchar2).Value = "SAVE";
+            cmd.Parameters.Add("p_from_date", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = DBNull.Value;
             cmd.Parameters.Add("p_json_input", OracleDbType.Clob).Value = JsonConvert.SerializeObject(items);
             cmd.Parameters.Add("p_updated_by", OracleDbType.Varchar2).Value = userName;
+            cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
 
             await cmd.ExecuteNonQueryAsync();
-            return Ok("Saved successfully");
+
+            // 2. Insert into history table (manual, reliable)
+            foreach (var item in items)
+            {
+                var statusCode = item.workingStatus switch
+                {
+                    "Working" => 1,
+                    "Not Working" => 2,
+                    "In Progress" => 3,
+                    "Data need to capture" => 4,
+                    "User feedback pending" => 5,
+                    _ => 1
+                };
+
+                using var cmdHist = new OracleCommand(@"
+                    INSERT INTO tbl_daily_verification_history 
+                    (crf_id, request_id, working_status, status_text, remarks, 
+                     attachment_name, verified_by, verified_on)
+                    VALUES (:crfId, :requestId, :status, :statusText, :remarks, 
+                     :attachment, :verifiedBy, SYSDATE)", conn);
+
+                cmdHist.Parameters.Add("crfId", OracleDbType.Varchar2).Value = item.crfId;
+                cmdHist.Parameters.Add("requestId", OracleDbType.Varchar2).Value = item.requestId ?? (object)DBNull.Value;
+                cmdHist.Parameters.Add("status", OracleDbType.Decimal).Value = statusCode;
+                cmdHist.Parameters.Add("statusText", OracleDbType.Varchar2).Value = item.workingStatus;
+                cmdHist.Parameters.Add("remarks", OracleDbType.Varchar2).Value = item.remarks ?? (object)DBNull.Value;
+                cmdHist.Parameters.Add("attachment", OracleDbType.Varchar2).Value = item.attachmentName ?? (object)DBNull.Value;
+                cmdHist.Parameters.Add("verifiedBy", OracleDbType.Varchar2).Value = userName;
+
+                await cmdHist.ExecuteNonQueryAsync();
+            }
+
+            return Ok(new { message = "Saved successfully" });
         }
+
+        // GET FILTERS
         [HttpGet("filters")]
         public async Task<IActionResult> GetFilters()
         {
@@ -109,37 +150,47 @@ namespace WebApplication10.Controllers
             using var conn = new OracleConnection(_connStr);
             await conn.OpenAsync();
 
-            // Tester TLs
             using (var cmd = new OracleCommand(@"
-        SELECT DISTINCT est.emp_name AS name
-        FROM mana0809.srm_dailyrelease_updn n
-        JOIN mana0809.srm_testing st ON st.request_id = n.request_id
-        JOIN mana0809.employee_master est ON est.emp_code = st.test_lead
-        ORDER BY est.emp_name", conn))
+                SELECT DISTINCT est.emp_name AS name
+                FROM mana0809.srm_dailyrelease_updn n
+                JOIN mana0809.srm_testing st ON st.request_id = n.request_id
+                JOIN mana0809.employee_master est ON est.emp_code = st.test_lead
+                ORDER BY est.emp_name", conn))
             {
-                using var r = await cmd.ExecuteReaderAsync();
-                while (await r.ReadAsync())
-                    tlList.Add(new { text = r["name"]?.ToString(), value = r["name"]?.ToString() });
+                using var rdr = await cmd.ExecuteReaderAsync();
+                while (await rdr.ReadAsync())
+                {
+                    var name = rdr["name"]?.ToString();
+                    if (!string.IsNullOrEmpty(name))
+                        tlList.Add(new { text = name, value = name });
+                }
             }
 
-            // Tester Names
             using (var cmd = new OracleCommand(@"
-        SELECT DISTINCT ets.emp_name AS name
-        FROM mana0809.srm_dailyrelease_updn n
-        JOIN mana0809.srm_test_assign ts ON ts.request_id = n.request_id
-        JOIN mana0809.employee_master ets ON ets.emp_code = ts.assign_to
-        ORDER BY ets.emp_name", conn))
+                SELECT DISTINCT TRIM(REGEXP_SUBSTR(tester, '[^,]+', 1, level)) AS name
+                FROM mana0809.srm_dailyrelease_updn
+                WHERE tester IS NOT NULL
+                CONNECT BY REGEXP_SUBSTR(tester, '[^,]+', 1, level) IS NOT NULL
+                  AND PRIOR dbms_random.value IS NOT NULL
+                  AND PRIOR sys_guid() IS NOT NULL
+                ORDER BY name", conn))
             {
-                using var r = await cmd.ExecuteReaderAsync();
-                while (await r.ReadAsync())
-                    testerList.Add(new { text = r["name"]?.ToString(), value = r["name"]?.ToString() });
+                using var rdr = await cmd.ExecuteReaderAsync();
+                while (await rdr.ReadAsync())
+                {
+                    var name = rdr["name"]?.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(name))
+                        testerList.Add(new { text = name, value = name });
+                }
             }
 
-            return Ok(new { testerTLs = tlList, testerNames = testerList });
+            return Ok(new
+            {
+                testerTLs = tlList,
+                testerNames = testerList
+            });
         }
     }
-
-
 
     public class FilterModel
     {
@@ -153,18 +204,11 @@ namespace WebApplication10.Controllers
     public class SaveModel
     {
         public required string crfId { get; set; }
+        public required string requestId { get; set; }  // <-- THIS WAS MISSING!
         public required string workingStatus { get; set; }
         public string remarks { get; set; } = "";
         public string? attachmentName { get; set; }
         public string? attachmentBase64 { get; set; }
         public string? attachmentMime { get; set; }
-    }
-}
-public static class OracleReaderExtensions
-{
-    public static string GetStringOrDefault(this OracleDataReader reader, string columnName, string defaultValue = "")
-    {
-        var ordinal = reader.GetOrdinal(columnName);
-        return reader.IsDBNull(ordinal) ? defaultValue : reader.GetString(ordinal).Trim();
     }
 }
