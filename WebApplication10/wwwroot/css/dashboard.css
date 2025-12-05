@@ -1,64 +1,174 @@
-﻿/* dashboard.css */
+﻿/* wwwroot/css/dashboard.css – FINAL 100% WORKING VERSION */
+
+:root {
+    --sidebar-width: 260px;
+    --topbar-height: 70px;
+}
+
 body {
-    font-family: Arial, sans-serif;
     margin: 0;
-    padding: 0;
-    background-color: #f8f9fa;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: #f5f7fa;
+    font-size: 0.925rem;
+    overflow-x: hidden;
 }
 
 .navbar {
-    z-index: 1000;
+    height: var(--topbar-height);
+    background: #212529 !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    z-index: 1030;
+}
+
+/* HAMBURGER MENU ALWAYS VISIBLE – EVEN WHEN SIDEBAR IS OPEN */
+
+.menu-toggle {
+    display: block !important;
+    color: white;
+    background: none;
+    border: none;
+    font-size: 1.7rem;
+    padding: 0 15px;
+    cursor: pointer;
+    z-index: 1040;
 }
 
 .sidebar {
-    height: 100vh;
     position: fixed;
-    top: 56px;
+    top: var(--topbar-height);
     left: 0;
-    width: 220px;
-    background-color: #343a40;
-    color: #fff;
-    padding-top: 20px;
-    overflow-y: auto;
-    z-index: 999;
+    width: var(--sidebar-width);
+    height: calc(100vh - var(--topbar-height));
+    background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%);
+    color: white;
+    z-index: 1020;
+    transition: transform 0.35s ease;
+    box-shadow: 4px 0 15px rgba(0,0,0,0.1);
 }
 
-    .sidebar .nav-link {
-        color: #ddd;
-        padding: 12px 20px;
-        display: block;
-        border-radius: 4px;
-        margin: 5px 15px;
+.sidebar-header {
+    padding: 1rem;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.2);
+}
+
+.sidebar .nav-link {
+    color: rgba(255,255,255,0.9);
+    padding: 12px 20px;
+    margin: 4px 15px;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+    .sidebar .nav-link:hover,
+    .sidebar .nav-link.active {
+        background: rgba(255,255,255,0.2);
+        color: white;
+        transform: translateX(6px);
     }
 
-        .sidebar .nav-link:hover,
-        .sidebar .nav-link.active {
-            background-color: #495057;
-            color: #fff;
-            text-decoration: none;
-        }
+    .sidebar .nav-link i {
+        width: 24px;
+        text-align: center;
+    }
 
 .content {
-    margin-left: 220px;
-    padding: 20px;
-    margin-top: 56px;
-    min-height: calc(100vh - 56px);
+    margin-left: var(--sidebar-width);
+    margin-top: var(--topbar-height);
+    min-height: calc(100vh - var(--topbar-height));
+    padding: 24px;
+    transition: margin-left 0.35s ease;
 }
 
-@media (max-width: 768px) {
+/* LARGE SCREEN (>992px): Sidebar always open */
+
+@media (min-width: 993px) {
+
     .sidebar {
-        width: 100%;
-        height: auto;
-        position: relative;
-        top: 0;
+        transform: translateX(0) !important;
     }
 
     .content {
-        margin-left: 0;
-        margin-top: 56px;
+        margin-left: var(--sidebar-width);
+    }
+}
+
+/* SMALL SCREEN (≤992px): Sidebar hidden by default, slides in on click */
+
+@media (max-width: 992px) {
+
+    .sidebar {
+        transform: translateX(-100%);
     }
 
-    .navbar-brand {
-        font-size: 1rem;
+        .sidebar.show {
+            transform: translateX(0);
+        }
+
+    .content {
+        margin-left: 0;
     }
+}
+
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.6);
+    z-index: 1010;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s;
+}
+
+    .sidebar-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+/* Extra styles */
+
+.card {
+    border-radius: 0.8rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    border: none;
+}
+
+.table {
+    font-size: 0.925rem;
+}
+
+.badge {
+    font-size: 0.8rem;
+}
+
+.confirm-btn {
+    min-width: 100px;
+    transition: all 0.2s;
+}
+
+.word-count {
+    font-size: 0.75rem;
+    margin-top: 4px;
+    color: #6c757d;
+}
+
+@media (min-width: 993px) {
+
+    .sidebar {
+        transform: translateX(0) !important;
+    }
+
+    .content {
+        margin-left: var(--sidebar-width) !important;
+    }
+}
+
+/* Ensure hamburger is always visible and clickable */
+
+.menu-toggle {
+    display: block !important;
 }

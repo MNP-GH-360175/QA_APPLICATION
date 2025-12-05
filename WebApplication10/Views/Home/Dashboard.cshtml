@@ -6,7 +6,9 @@
 <div class="content-container">
     <!-- Page Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 id="welcomeText" class="mb-0">Welcome, <span id="userDisplayName">User</span>!</h2>
+        <h2 class="mb-0">
+            Welcome, <strong id="welcomeUserName" class="text-primary">Loading...</strong>!
+        </h2>
         <small class="text-muted">Dashboard Overview</small>
     </div>
 
@@ -31,7 +33,7 @@
             </div>
         </div>
 
-        <!-- CRF List -->
+        <!-- CRF List (Pending) -->
         <div class="col-lg-3 col-md-6">
             <div class="card border-left-warning shadow h-100 py-2">
                 <div class="card-body">
@@ -69,7 +71,7 @@
             </div>
         </div>
 
-        <!-- Bug Report -->
+        <!-- Bug Reports (Open) -->
         <div class="col-lg-3 col-md-6">
             <div class="card border-left-danger shadow h-100 py-2">
                 <div class="card-body">
@@ -89,9 +91,6 @@
         </div>
     </div>
 </div>
-
-<!-- Optional: Include Font Awesome for icons (add to _DashboardLayout.cshtml head if not already) -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
 <style>
     .border-left-primary {
@@ -114,3 +113,19 @@
         padding: 20px;
     }
 </style>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        let empName = localStorage.getItem('empName');
+        if (!empName || empName === "null" || empName === "") {
+            const token = localStorage.getItem('jwtToken');
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    empName = payload.name || payload.fullname || payload.unique_name || payload.sub || "User";
+                } catch (e) { empName = "User"; }
+            }
+        }
+        document.getElementById("welcomeUserName").textContent = (empName || "User").toUpperCase();
+    });
+</script>
