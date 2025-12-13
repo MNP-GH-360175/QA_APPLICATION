@@ -1,32 +1,155 @@
-﻿body {
-    height: 100vh;
+﻿* {
     margin: 0;
     padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    background: url('/images/bg6.jpg') no-repeat center center fixed;
-    background-size: cover;
-    background-color: #FFD700;
-    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    overflow: hidden;
+    overscroll-behavior-x: none;
+    touch-action: pan-y pinch-zoom;
 }
 
-/* Remove the existing login-container styles since Flexbox handles positioning */
 .login-container {
-    display: flex; /* Flex container, optional if directly on body */
+    display: flex;
+    width: 950px;
+    max-width: 95%;
+    height: 520px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.left-side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    width: 100%;
-    height: 10%;
+    padding: 40px;
+    color: white;
+    background: rgba(0, 0, 0, 0.2);
 }
 
-/* Keep your login-box styles for appearance */
-.login-box {
-    background-color: rgba(255, 255, 255, 0.95);
-    padding: 30px;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    max-width: 400px;
+.user-icon {
+    width: 110px;
+    height: 110px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 40px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(5px);
+}
+
+    .user-icon i {
+        font-size: 55px;
+    }
+
+.left-side h1 {
+    font-size: 42px;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.left-side p {
+    font-size: 18px;
+    opacity: 0.9;
+}
+
+.right-side {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.95);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px 50px;
+    border-radius: 0 20px 20px 0;
+}
+
+    .right-side h2 {
+        font-size: 30px;
+        font-weight: 600;
+        color: #333;
+        text-align: center;
+        margin-bottom: 40px;
+    }
+
+.form-group {
+    margin-bottom: 25px;
+}
+
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #555;
+        font-weight: 500;
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 14px 18px;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        font-size: 16px;
+        background: transparent;
+        transition: all 0.3s;
+    }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+        }
+
+.btn-login {
     width: 100%;
-    box-sizing: border-box; /* Ensure padding is included in width */
+    padding: 16px;
+    background: linear-gradient(to right, #667eea, #764ba2);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+    .btn-login:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 30px rgba(102, 126, 234, 0.4);
+    }
+
+#errorMessage {
+    text-align: center;
+    color: #e74c3c;
+    margin-top: 20px;
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .login-container {
+        flex-direction: column;
+        height: auto;
+    }
+
+    .left-side {
+        padding: 40px 20px;
+    }
+
+    .right-side {
+        border-radius: 0 0 20px 20px;
+        padding: 40px 30px;
+    }
 }

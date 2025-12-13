@@ -46,10 +46,19 @@ namespace WebApplication10.Controllers
                 {
                     var token = GenerateJwtToken(empCode, empName);
 
+                    // Set as HttpOnly cookie
+                    Response.Cookies.Append("jwtToken", token, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = true,          // true for HTTPS
+                        SameSite = SameSiteMode.Strict,
+                        Expires = DateTime.UtcNow.AddHours(8)
+                    });
+
                     return Ok(new
                     {
-                        token,
-                        empName,     // THIS WAS THE FIX!
+                        token,        // still send for client if needed
+                        empName,
                         empCode
                     });
                 }
