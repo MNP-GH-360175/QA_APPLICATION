@@ -1,8 +1,7 @@
 ﻿@{
     ViewData["Title"] = "Login";
-    Layout = null; // No shared layout needed for login page
+    Layout = null;
 }
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,81 +9,111 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"]</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/login.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <!-- Prevent swipe back/forward gestures -->
     <style>
         body {
-            background: #f8f9fa;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-
-        .login-card {
-            width: 100%;
-            max-width: 400px;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            overscroll-behavior-x: none;
+            touch-action: pan-y pinch-zoom;
         }
     </style>
 </head>
 <body>
-    <div class="card login-card bg-white">
-        <div class="card-body">
-            <h2 class="text-center mb-4">Employee Login</h2>
+    <div class="login-container">
+        <!-- Left Side: Welcome + Icon -->
+        <div class="left-side">
+            <div class="user-icon">
+                <i class="fas fa-user"></i>
+            </div>
+            <h1>Welcome.</h1>
+            <p>Welcome to Quality Assurance Department Manappuram finance limited</p>
+        </div>
+        <!-- Right Side: Login Form -->
+        <div class="right-side">
+            <h2>Employee Login</h2>
+            <form id="loginForm" autocomplete="off">
+                <!-- Hidden dummy inputs to confuse browser autofill -->
+                <input type="text" style="display:none;" autocomplete="off" />
+                <input type="password" style="display:none;" autocomplete="new-password" />
 
-            <form id="loginForm">
-                <div class="mb-3">
-                    <label class="form-label">EmpCode</label>
-                    <input type="text" class="form-control" id="EmpCode" required autofocus />
+                <div class="form-group">
+                    <label for="EmpCode">EmpCode</label>
+                    <input type="text" id="EmpCode" autocomplete="nope" readonly required autofocus />
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Password</label>
-                    <input type="password" class="form-control" id="Password" required />
+                <div class="form-group">
+                    <label for="Password">Password</label>
+                    <input type="password" id="Password" autocomplete="new-password" readonly required />
                 </div>
-                <button type="submit" class="btn btn-primary w-100">Login</button>
+                <button type="submit" class="btn-login">Login</button>
             </form>
-
-            <div id="errorMessage" class="mt-3 text-danger text-center"></div>
+            <div id="errorMessage"></div>
         </div>
     </div>
-
     <script>
+        // Prevent swipe back/forward
+        document.addEventListener('touchstart', function (e) {
+            const edgeMargin = 60;
+            const touch = e.touches[0];
+            if (touch && (touch.pageX < edgeMargin || touch.pageX > (window.innerWidth - edgeMargin))) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        if (history.replaceState) {
+            history.replaceState(null, null, location.href);
+        }
+
+        // Remove readonly on focus (prevents initial autofill)
+        document.getElementById("EmpCode").addEventListener("focus", function () {
+            this.removeAttribute("readonly");
+        });
+        document.getElementById("Password").addEventListener("focus", function () {
+            this.removeAttribute("readonly");
+        });
+
         document.getElementById("loginForm").addEventListener("submit", async function (e) {
             e.preventDefault();
-
             const empCode = document.getElementById("EmpCode").value.trim();
             const password = document.getElementById("Password").value;
             const errorDiv = document.getElementById("errorMessage");
             errorDiv.textContent = "";
-
+            errorDiv.style.color = "red";
+            if (!empCode || !password) {
+                errorDiv.textContent = "Please enter both EmpCode and Password";
+                return;
+            }
             try {
+                console.log("Attempting login:", empCode);
                 const response = await fetch('/api/Auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ EmpCode: empCode, Password: password })
                 });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    // Save BOTH token and employee name
-                    localStorage.setItem('jwtToken', data.token);
-                    localStorage.setItem('empName', data.empName);   // This was missing!
-
-                    // Optional: also save empCode if you want
-                    localStorage.setItem('empCode', data.empCode);
-
-                    window.location.href = '/Home/Dashboard';
+                console.log("Status:", response.status);
+                const text = await response.text();
+                console.log("Raw response:", text);
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (err) {
+                    errorDiv.textContent = "Invalid server response";
+                    return;
                 }
-                else {
+                if (response.ok && data.token) {
+                    console.log("Login successful!", data);
+                    localStorage.setItem('jwtToken', data.token);
+                    localStorage.setItem('empName', data.empName || "User");
+                    localStorage.setItem('empCode', data.empCode || empCode);
+                    errorDiv.style.color = "green";
+                    errorDiv.textContent = "Login successful! Redirecting...";
+                    window.location.replace("/Home/Dashboard");
+                } else {
                     errorDiv.textContent = data.message || "Invalid EmpCode or Password";
                 }
-            }
-            catch (err) {
+            } catch (err) {
+                console.error("Error:", err);
                 errorDiv.textContent = "Network error. Please try again.";
-                console.error(err);
             }
         });
     </script>

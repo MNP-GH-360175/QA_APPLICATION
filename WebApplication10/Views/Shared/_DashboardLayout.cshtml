@@ -91,22 +91,60 @@
         document.addEventListener("DOMContentLoaded", () => {
             const token = localStorage.getItem('jwtToken');
             const empName = localStorage.getItem('empName');
-            if (!token || !empName) { window.location.href = '/Home/Login'; return; }
+            if (!token || !empName) {
+                window.location.href = '/Home/Login';
+                return;
+            }
             document.getElementById('navbarUserName').textContent = empName;
 
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
             const toggle = document.getElementById('menuToggle');
+            const body = document.body;
 
-            toggle.addEventListener('click', () => {
-                sidebar.classList.toggle('show');
-                overlay.classList.toggle('show');
-            });
-            overlay.addEventListener('click', () => {
+            const openSidebar = () => {
+                sidebar.classList.add('show');
+                overlay.classList.add('show');
+                body.classList.add('sidebar-open'); // Triggers CSS lock
+            };
+
+            const closeSidebar = () => {
                 sidebar.classList.remove('show');
                 overlay.classList.remove('show');
+                body.classList.remove('sidebar-open');
+            };
+
+            toggle.addEventListener('click', () => {
+                if (sidebar.classList.contains('show')) {
+                    closeSidebar();
+                } else {
+                    openSidebar();
+                }
             });
 
+            // Close only on overlay CLICK (not swipe/drag)
+            overlay.addEventListener('click', closeSidebar);
+
+            // Optional: Add a close button inside sidebar if needed
+            // document.getElementById('closeSidebarBtn')?.addEventListener('click', closeSidebar);
+
+            // Prevent any touchmove that might interfere
+            document.addEventListener('touchmove', (e) => {
+                if (sidebar.classList.contains('show')) {
+                    // Only allow vertical scroll
+                    const touch = e.touches[0];
+                    const deltaX = Math.abs(touch.clientX - (touch.startX || touch.clientX));
+                    const deltaY = Math.abs(touch.clientY - (touch.startY || touch.clientY));
+                    touch.startX = touch.clientX;
+                    touch.startY = touch.clientY;
+
+                    if (deltaX > deltaY && deltaX > 10) {
+                        e.preventDefault(); // Block horizontal swipe
+                    }
+                }
+            }, { passive: false });
+
+            // Logout confirmation
             document.getElementById('logoutBtn')?.addEventListener('click', e => {
                 e.preventDefault();
                 if (confirm('Are you sure you want to logout?')) {

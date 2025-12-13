@@ -172,3 +172,19 @@ body {
 .menu-toggle {
     display: block !important;
 }
+
+/* Prevent horizontal scrolling/swiping on the body when sidebar is open */
+body.sidebar-open {
+    overflow: hidden;
+    touch-action: pan-y; /* Allows vertical scroll, blocks horizontal swipe */
+}
+
+/* Ensure content doesn't allow horizontal swipe */
+.content {
+    touch-action: pan-y pinch-zoom; /* Safe vertical scrolling only */
+}
+
+/* Overlay should not respond to horizontal touches */
+.sidebar-overlay.show {
+    touch-action: none; /* Blocks all touch actions on overlay */
+}
