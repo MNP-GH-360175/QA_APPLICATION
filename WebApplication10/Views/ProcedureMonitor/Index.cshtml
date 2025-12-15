@@ -1,0 +1,180 @@
+﻿@{
+    Layout = "~/Views/Shared/_DashboardLayout.cshtml";
+    ViewData["Title"] = "Updation Log Monitor";
+}
+
+<div class="content-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0 text-primary fw-bold">
+            <i class="fas fa-microchip me-3"></i>Updation Log Monitor
+        </h2>
+        <small class="text-muted">Live search for procedure executions</small>
+    </div>
+
+    <!-- Date Range Form -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-primary text-white fw-bold">
+            Select Date Range
+        </div>
+        <div class="card-body">
+            @using (Html.BeginForm("Index", "ProcedureMonitor", FormMethod.Post, new { @class = "row g-3 align-items-end" }))
+            {
+                @Html.AntiForgeryToken()
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">From Date</label>
+                    <input type="date" name="fromDate" class="form-control form-control-lg" value="@ViewBag.FromDate" required />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">To Date</label>
+                    <input type="date" name="toDate" class="form-control form-control-lg" value="@ViewBag.ToDate" required />
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="fas fa-check me-2"></i>Confirm
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (ViewBag.ShowResults == true)
+    {
+        <!-- Live Search Box (Auto-filter as user types) -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-info text-white fw-bold">
+                Search Procedure (Type to filter instantly)
+            </div>
+            <div class="card-body">
+                <input type="text" id="liveSearch" class="form-control form-control-lg"
+                       placeholder="Start typing procedure name..." autocomplete="off" />
+            </div>
+        </div>
+
+        <!-- Results Table with Pagination -->
+        <div class="card shadow">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Updation Log Details</h5>
+                <small id="recordInfo">
+                    Showing @Model.Count filtered record(s) | Page @ViewBag.CurrentPage of @ViewBag.TotalPages
+                </small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="procedureTable">
+                        <thead class="bg-light text-dark fw-semibold">
+                            <tr>
+                                <th class="text-center" style="width:80px;">S.No</th>
+                                <th>Module / Procedure Name</th>
+                                <th class="text-center">In Time</th>
+                                <th class="text-center">Out Time</th>
+                                <th class="text-center" style="width:160px;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model == null || Model.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="5" class="text-center py-5 text-muted">
+                                        <i class="fas fa-info-circle fa-4x mb-3 text-primary"></i>
+                                        <h5>No records found</h5>
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                foreach (var item in Model)
+                                {
+                                    string rowClass = item.IsRunningToday ? "table-success" : "table-danger";
+
+                                    <tr class="@rowClass" data-module="@item.ModuleName.ToLower()">
+                                        <td class="text-center fw-bold">@item.SerialNo</td>
+                                        <td class="fw-medium">@item.ModuleName</td>
+                                        <td class="text-center">@(string.IsNullOrEmpty(item.InTime) ? "-" : item.InTime)</td>
+                                        <td class="text-center">
+                                            @if (item.OutTime == null)
+                                            {
+                                                <i class="fas fa-times-circle text-danger" style="font-size: 2rem;" title="Out Time Missing"></i>
+                                            }
+                                            else
+                                            {
+                                                @item.OutTime
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge @(item.IsRunningToday ? "bg-success" : "bg-danger") px-4 py-2">
+                                                @item.StatusText
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination (preserves search via URL if needed, but live search is client-side) -->
+                @if (ViewBag.TotalPages > 1)
+                {
+                    <div class="card-footer bg-light d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-muted">
+                                Page @ViewBag.CurrentPage of @ViewBag.TotalPages
+                            </span>
+                        </div>
+                        <div>
+                            @if (ViewBag.HasPrevious)
+                            {
+                                <a href="@Url.Action("Index", new { fromDate = ViewBag.FromDate, toDate = ViewBag.ToDate, page = ViewBag.CurrentPage - 1 })"
+                                   class="btn btn-outline-primary me-2">
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </a>
+                            }
+                            @if (ViewBag.HasNext)
+                            {
+                                <a href="@Url.Action("Index", new { fromDate = ViewBag.FromDate, toDate = ViewBag.ToDate, page = ViewBag.CurrentPage + 1 })"
+                                   class="btn btn-outline-primary">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </a>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="text-center py-5">
+            <i class="fas fa-calendar-alt fa-5x text-muted mb-4"></i>
+            <h4 class="text-muted">Please select a date range and click Confirm to view Updation Log details</h4>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const searchInput = document.getElementById("liveSearch");
+            const tableRows = document.querySelectorAll("#procedureTable tbody tr[data-module]");
+            const recordInfo = document.getElementById("recordInfo");
+
+            searchInput.addEventListener("input", function () {
+                const filter = searchInput.value.toLowerCase();
+                let visibleCount = 0;
+
+                tableRows.forEach(row => {
+                    const moduleName = row.getAttribute("data-module");
+                    if (moduleName.includes(filter)) {
+                        row.style.display = "";
+                        visibleCount++;
+                    } else {
+                        row.style.display = "none";
+                    }
+                });
+
+                // Update record count
+                recordInfo.textContent = `Showing ${visibleCount} filtered record(s) | Page @ViewBag.CurrentPage of @ViewBag.TotalPages`;
+            });
+        });
+    </script>
+}

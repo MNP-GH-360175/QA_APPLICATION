@@ -68,6 +68,12 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ProcedureMonitor" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")"
+                   href="/ProcedureMonitor/Index">
+                    <i class="fas fa-microchip"></i> Daily Procedure Monitor
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link" href="#">CRF List</a>
             </li>
             <li class="nav-item">
