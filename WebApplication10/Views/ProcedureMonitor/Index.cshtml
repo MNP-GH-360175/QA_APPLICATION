@@ -8,7 +8,7 @@
         <h2 class="mb-0 text-primary fw-bold">
             <i class="fas fa-microchip me-3"></i>Updation Log Monitor
         </h2>
-        <small class="text-muted">Live search and Excel-like sorting on In Time / Out Time</small>
+        <small class="text-muted">Global search across all executions in selected date range</small>
     </div>
 
     <!-- Date Range Form -->
@@ -39,38 +39,34 @@
 
     @if (ViewBag.ShowResults == true)
     {
-        <!-- Live Search -->
+        <!-- Global Live Search -->
         <div class="card shadow mb-4">
             <div class="card-header bg-info text-white fw-bold">
-                Search Procedure (Type to filter instantly)
+                Search Procedure (Filters all records instantly)
             </div>
             <div class="card-body">
-                <input type="text" id="liveSearch" class="form-control form-control-lg"
-                       placeholder="Start typing procedure name..." autocomplete="off" />
+                <input type="text" id="globalSearch" class="form-control form-control-lg"
+                       placeholder="Type any part of procedure name..." autocomplete="off" />
             </div>
         </div>
 
-        <!-- Table with Sorting -->
+        <!-- Table -->
         <div class="card shadow">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>Execution Details</h5>
                 <small id="recordInfo">
-                    Showing @Model.Count record(s)
+                    Showing @ViewBag.TotalRecords record(s)
                 </small>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover mb-0" id="procedureTable">
+                    <table class="table table-hover mb-0" id="executionTable">
                         <thead class="bg-light text-dark fw-semibold">
                             <tr>
                                 <th class="text-center" style="width:80px;">S.No</th>
                                 <th>Module / Procedure Name</th>
-                                <th class="text-center sortable cursor-pointer" data-sort="inTime">
-                                    In Time <i class="fas fa-sort-down ms-1" id="inTimeIcon"></i>
-                                </th>
-                                <th class="text-center sortable cursor-pointer" data-sort="outTime">
-                                    Out Time <i class="fas fa-sort ms-1" id="outTimeIcon"></i>
-                                </th>
+                                <th class="text-center">In Time</th>
+                                <th class="text-center">Out Time</th>
                                 <th class="text-center" style="width:160px;">Status</th>
                             </tr>
                         </thead>
@@ -89,11 +85,8 @@
                                 foreach (var item in Model)
                                 {
                                     string rowClass = item.IsRunningToday ? "table-success" : "table-danger";
-                                    string inTimeSort = item.InTime == "-" ? "0000-00-00 00:00:00" : item.InTime.Replace(" AM", "").Replace(" PM", "");
-                                    string outTimeSort = item.OutTime == null ? "0000-00-00 00:00:00" : item.OutTime.Replace(" AM", "").Replace(" PM", "");
 
-                                    <tr class="@rowClass" data-module="@item.ModuleName.ToLower()"
-                                        data-in-time="@inTimeSort" data-out-time="@outTimeSort">
+                                    <tr class="@rowClass" data-module="@item.ModuleName.ToLower()">
                                         <td class="text-center fw-bold serial-no"></td>
                                         <td class="fw-medium">@item.ModuleName</td>
                                         <td class="text-center">@(string.IsNullOrEmpty(item.InTime) ? "-" : item.InTime)</td>
@@ -133,118 +126,41 @@
 @section Scripts {
     <script>
         document.addEventListener("DOMContentLoaded", function () {
+            const searchInput = document.getElementById("globalSearch");
             const tableBody = document.getElementById("tableBody");
-            const rowsArray = Array.from(tableBody.querySelectorAll("tr[data-module]"));
-            const liveSearch = document.getElementById("liveSearch");
+            const rows = Array.from(tableBody.querySelectorAll("tr[data-module]"));
             const recordInfo = document.getElementById("recordInfo");
-            const inTimeHeader = document.querySelector("[data-sort='inTime']");
-            const outTimeHeader = document.querySelector("[data-sort='outTime']");
-            const inTimeIcon = document.getElementById("inTimeIcon");
-            const outTimeIcon = document.getElementById("outTimeIcon");
 
-            let currentSort = { column: 'inTime', direction: 'desc' };
+            function filterTable() {
+                const filter = searchInput.value.toLowerCase();
+                let visibleCount = 0;
 
-            // Parse time string like "11:48:35 AM" to comparable format
-            function parseTime(timeStr) {
-                if (timeStr === "-" || !timeStr) return new Date(0); // earliest for null
-                const [time, period] = timeStr.split(' ');
-                let [hours, minutes, seconds] = time.split(':').map(Number);
-                if (period === 'PM' && hours !== 12) hours += 12;
-                if (period === 'AM' && hours === 12) hours = 0;
-                const date = new Date();
-                date.setHours(hours, minutes, seconds);
-                return date;
-            }
-
-            function sortRows() {
-                const filter = liveSearch.value.toLowerCase();
-
-                let filteredRows = rowsArray.filter(row => {
-                    const module = row.getAttribute("data-module");
-                    return module.includes(filter);
-                });
-
-                filteredRows.sort((a, b) => {
-                    let aVal, bVal;
-
-                    if (currentSort.column === 'inTime') {
-                        aVal = parseTime(a.querySelector("td:nth-child(3)").textContent.trim());
-                        bVal = parseTime(b.querySelector("td:nth-child(3)").textContent.trim());
+                rows.forEach(row => {
+                    const moduleName = row.getAttribute("data-module");
+                    if (moduleName.includes(filter)) {
+                        row.style.display = "";
+                        visibleCount++;
                     } else {
-                        const aOut = a.querySelector("td:nth-child(4)");
-                        const bOut = b.querySelector("td:nth-child(4)");
-                        aVal = aOut.querySelector("i") ? new Date(0) : parseTime(aOut.textContent.trim());
-                        bVal = bOut.querySelector("i") ? new Date(0) : parseTime(bOut.textContent.trim());
-                    }
-
-                    if (currentSort.direction === 'asc') {
-                        return aVal - bVal;
-                    } else {
-                        return bVal - aVal;
+                        row.style.display = "none";
                     }
                 });
 
-                // Clear and re-append
-                tableBody.innerHTML = "";
-                filteredRows.forEach(row => tableBody.appendChild(row));
-
-                // Renumber
-                tableBody.querySelectorAll(".serial-no").forEach((td, i) => {
-                    td.textContent = i + 1;
+                // Update serial numbers for visible rows only
+                let serial = 1;
+                rows.forEach(row => {
+                    if (row.style.display !== "none") {
+                        row.querySelector(".serial-no").textContent = serial++;
+                    }
                 });
 
-                // Update info
-                recordInfo.textContent = `Showing ${filteredRows.length} filtered record(s)`;
+                recordInfo.textContent = `Showing ${visibleCount} matching record(s)`;
             }
 
-            // Initial sort
-            sortRows();
-            inTimeIcon.className = "fas fa-sort-down ms-1";
-
-            // Header clicks
-            inTimeHeader.addEventListener("click", () => {
-                if (currentSort.column === 'inTime') {
-                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-                } else {
-                    currentSort.column = 'inTime';
-                    currentSort.direction = 'desc';
-                }
-                updateIcons();
-                sortRows();
-            });
-
-            outTimeHeader.addEventListener("click", () => {
-                if (currentSort.column === 'outTime') {
-                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-                } else {
-                    currentSort.column = 'outTime';
-                    currentSort.direction = 'desc';
-                }
-                updateIcons();
-                sortRows();
-            });
-
-            function updateIcons() {
-                inTimeIcon.className = "fas fa-sort ms-1";
-                outTimeIcon.className = "fas fa-sort ms-1";
-
-                const activeIcon = currentSort.column === 'inTime' ? inTimeIcon : outTimeIcon;
-                activeIcon.className = currentSort.direction === 'asc' ? "fas fa-sort-up ms-1" : "fas fa-sort-down ms-1";
-            }
+            // Initial display
+            filterTable();
 
             // Live search
-            liveSearch.addEventListener("input", sortRows);
+            searchInput.addEventListener("input", filterTable);
         });
     </script>
-
-    <style>
-        .sortable {
-            cursor: pointer;
-            user-select: none;
-        }
-
-            .sortable:hover {
-                background-color: #e9ecef !important;
-            }
-    </style>
 }

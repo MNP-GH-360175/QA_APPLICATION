@@ -9,7 +9,6 @@
         </h3>
         <span class="text-muted small">Verify released CRFs daily</span>
     </div>
-
     <!-- Filters Card -->
     <div class="card shadow border-0 mb-4">
         <div class="card-header bg-gradient bg-primary text-white">
@@ -58,7 +57,6 @@
             </form>
         </div>
     </div>
-
     <!-- Results Table Card -->
     <div class="card shadow border-0" id="resultCard" style="display:none;">
         <div class="card-header bg-primary text-white d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
@@ -75,7 +73,6 @@
                 </button>
             </div>
         </div>
-
         <!-- Table Search & Pagination Controls -->
         <div class="card-header border-bottom bg-light px-4 py-3 d-flex flex-column flex-md-row justify-content-between gap-3">
             <div class="col-12 col-md-4">
@@ -91,7 +88,6 @@
                 </span>
             </nav>
         </div>
-
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0 align-middle text-nowrap" id="verificationTable">
@@ -114,7 +110,6 @@
                     <tbody id="verificationBody" class="bg-white"></tbody>
                 </table>
             </div>
-
             <!-- Empty State -->
             <div class="text-center py-5 text-muted" id="emptyState" style="display:none;">
                 No records found
@@ -203,7 +198,6 @@
                 if (!res.ok) throw new Error(await res.text());
                 const rawData = await res.json();
                 verificationData = rawData.map(item => normalizeKeys(item));
-
                 verificationData.forEach(item => {
                     item.crfId = item.CRF_ID || "N/A";
                     item.requestId = item.REQUEST_ID || "";
@@ -232,7 +226,6 @@
                         item.History = [];
                     }
                 });
-
                 filteredData = [...verificationData];
                 currentPage = 1;
                 updateTableAndPagination();
@@ -247,71 +240,65 @@
             const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
             document.getElementById("totalPages").textContent = totalPages;
             document.getElementById("currentPage").textContent = currentPage;
-
             document.getElementById("prevPage").parentElement.classList.toggle("disabled", currentPage === 1);
             document.getElementById("nextPage").parentElement.classList.toggle("disabled", currentPage === totalPages);
-
             renderTable();
         }
 
         function renderTable() {
             const tbody = document.getElementById("verificationBody");
             tbody.innerHTML = "";
-
             const start = (currentPage - 1) * pageSize;
             const end = start + pageSize;
             const pageData = filteredData.slice(start, end);
-
             if (filteredData.length === 0) {
                 document.getElementById("emptyState").style.display = "block";
                 return;
             }
             document.getElementById("emptyState").style.display = "none";
-
             pageData.forEach((item, idx) => {
                 const globalIdx = filteredData.indexOf(item);
                 const isDaily = item.releaseTypeText.includes("Daily");
                 const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
                 const badgeText = isDaily ? "Daily" : "Exp.";
                 const canConfirm = item.workingStatus && (item.remarks || "").trim().length > 0;
-
                 const row = document.createElement("tr");
                 row.innerHTML = `
-                        <td class="ps-4"><a href="#" class="text-decoration-none fw-bold text-primary crf-link" data-idx="${globalIdx}">${item.crfId}</a></td>
-                        <td><span class="badge bg-secondary fs-7">${item.requestId || 'N/A'}</span></td>
-                        <td><span class="badge ${badgeCls} fs-7">${badgeText}</span></td>
-                        <td class="text-wrap" title="${item.subject}">${item.subject.length > 50 ? item.subject.substring(0, 47) + '...' : item.subject}</td>
-                        <td>${item.releaseDate}</td>
-                        <td><strong>${item.techlead}</strong></td>
-                        <td>${item.developer}</td>
-                        <td>${item.tester}</td>
-                        <td class="text-center align-middle">
-                            ${item.isConfirmed
+                                <td class="ps-4"><a href="#" class="text-decoration-none fw-bold text-primary crf-link" data-idx="${globalIdx}">${item.crfId}</a></td>
+                                <td><span class="badge bg-secondary fs-7">${item.requestId || 'N/A'}</span></td>
+                                <td><span class="badge ${badgeCls} fs-7">${badgeText}</span></td>
+                                <td class="text-wrap" title="${item.subject}">${item.subject.length > 50 ? item.subject.substring(0, 47) + '...' : item.subject}</td>
+                                <td>${item.releaseDate}</td>
+                                <td><strong>${item.techlead}</strong></td>
+                                <td>${item.developer}</td>
+                                <td>${item.tester}</td>
+                                <td class="text-center align-middle">
+                                    ${item.isConfirmed
                         ? `<span class="badge bg-success px-3 py-2 fs-7">${item.workingStatus}</span>
-                                   <button class="btn btn-sm btn-outline-warning ms-2 edit-btn" data-idx="${globalIdx}">Edit</button>`
+                                           <button class="btn btn-sm btn-outline-warning ms-2 edit-btn" data-idx="${globalIdx}">Edit</button>`
                         : `<select class="form-select form-select-sm status-select" data-idx="${globalIdx}">
-                                      <option value="">-- Select --</option>
-                                      ${STATUS_OPTIONS.map(opt => `<option value="${opt}" ${item.workingStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
-                                   </select>`
+                                              <option value="">-- Select --</option>
+                                              ${STATUS_OPTIONS.map(opt => `<option value="${opt}" ${item.workingStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                                           </select>`
                     }
-                        </td>
-                        <td class="align-middle">
-                            <textarea class="form-control form-control-sm remarks-text w-100" rows="2" data-idx="${globalIdx}" ${item.isConfirmed ? 'readonly' : ''}>${item.remarks || ''}</textarea>
-                            <small class="text-muted word-count">${(item.remarks || '').trim().split(/\s+/).filter(Boolean).length} words</small>
-                        </td>
-                        <td class="align-middle">
-                            ${!item.isConfirmed
+                                </td>
+                                <td class="align-middle">
+                                    <textarea class="form-control form-control-sm remarks-text w-100" rows="2" data-idx="${globalIdx}" ${item.isConfirmed ? 'readonly' : ''}>${item.remarks || ''}</textarea>
+                                    <small class="text-muted word-count">${(item.remarks || '').trim().split(/\s+/).filter(Boolean).length} words</small>
+                                </td>
+                                <td class="align-middle">
+                                    ${!item.isConfirmed
                         ? `<input type="file" class="form-control form-control-sm file-input" data-idx="${globalIdx}" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">`
                         : (item.attachmentName ? `<a href="#" class="text-primary download-link" data-idx="${globalIdx}"> ${item.attachmentName}</a>` : '-')
                     }
-                        </td>
-                        <td class="text-center align-middle">
-                            <button class="btn ${item.isConfirmed ? 'btn-success' : (canConfirm ? 'btn-primary' : 'btn-secondary')} btn-sm px-4 confirm-btn"
-                                    data-idx="${globalIdx}" ${item.isConfirmed || !canConfirm ? 'disabled' : ''}>
-                                ${item.isConfirmed ? 'Confirmed' : 'Confirm'}
-                            </button>
-                        </td>
-                    `;
+                                </td>
+                                <td class="text-center align-middle">
+                                    <button class="btn ${item.isConfirmed ? 'btn-success' : (canConfirm ? 'btn-primary' : 'btn-secondary')} btn-sm px-4 confirm-btn"
+                                            data-idx="${globalIdx}" ${item.isConfirmed || !canConfirm ? 'disabled' : ''}>
+                                        ${item.isConfirmed ? 'Confirmed' : 'Confirm'}
+                                    </button>
+                                </td>
+                            `;
                 tbody.appendChild(row);
             });
             attachEvents();
@@ -326,7 +313,6 @@
                     updateConfirmButton(idx);
                 });
             });
-
             document.querySelectorAll(".remarks-text").forEach(ta => {
                 ta.addEventListener("input", e => {
                     const idx = e.target.dataset.idx;
@@ -337,14 +323,12 @@
                     updateConfirmButton(idx);
                 });
             });
-
             document.querySelectorAll(".confirm-btn").forEach(btn => {
                 btn.addEventListener("click", e => {
                     const idx = e.target.closest("button").dataset.idx;
                     saveItem(verificationData[idx]);
                 });
             });
-
             document.querySelectorAll(".edit-btn").forEach(btn => {
                 btn.addEventListener("click", e => {
                     const idx = e.target.dataset.idx;
@@ -353,7 +337,6 @@
                     renderTable();
                 });
             });
-
             document.querySelectorAll(".crf-link").forEach(link => {
                 link.addEventListener("click", e => {
                     e.preventDefault();
@@ -374,7 +357,7 @@
             }
         }
 
-        // Pagination Controls
+        // Pagination, Search, Export (unchanged)
         document.getElementById("prevPage").addEventListener("click", e => {
             e.preventDefault();
             if (currentPage > 1) {
@@ -383,7 +366,6 @@
                 updateTableAndPagination();
             }
         });
-
         document.getElementById("nextPage").addEventListener("click", e => {
             e.preventDefault();
             if (currentPage < Math.ceil(filteredData.length / pageSize)) {
@@ -392,8 +374,6 @@
                 updateTableAndPagination();
             }
         });
-
-        // Live Search
         document.getElementById("tableSearch").addEventListener("input", e => {
             const query = e.target.value.toLowerCase();
             filteredData = verificationData.filter(item =>
@@ -403,14 +383,11 @@
             currentPage = 1;
             updateTableAndPagination();
         });
-
-        // Export to Excel Function
         document.getElementById("exportExcelBtn").addEventListener("click", () => {
             if (filteredData.length === 0) {
                 alert("No data to export!");
                 return;
             }
-
             const dataToExport = filteredData.map(item => ({
                 "CRF ID": item.crfId,
                 "Request ID": item.requestId || "N/A",
@@ -424,28 +401,34 @@
                 "Remarks": (item.remarks || "").replace(/\n/g, " "),
                 "Attachment": item.attachmentName || "None"
             }));
-
             const ws = XLSX.utils.json_to_sheet(dataToExport);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Verification Data");
-
-            // Auto-size columns
             const colWidths = [
                 { wch: 12 }, { wch: 15 }, { wch: 8 }, { wch: 50 },
                 { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
                 { wch: 20 }, { wch: 40 }, { wch: 25 }
             ];
             ws['!cols'] = colWidths;
-
             const today = new Date().toISOString().slice(0, 10);
             XLSX.writeFile(wb, `Daily_Release_Verification_${today}.xlsx`);
         });
 
+        // === FIXED saveItem FUNCTION ===
         async function saveItem(item) {
+            // Client-side validation
+            if (!item.workingStatus) {
+                showToast("Please select a Status", "danger");
+                return;
+            }
+            if (!item.remarks || item.remarks.trim().length === 0) {
+                showToast("Remarks are mandatory", "danger");
+                return;
+            }
+
             const fileInput = document.querySelector(`.file-input[data-idx="${verificationData.indexOf(item)}"]`);
             const file = fileInput?.files[0];
             let attachmentBase64 = null, attachmentName = null, attachmentMime = null;
-
             if (file) {
                 attachmentBase64 = await fileToBase64(file);
                 attachmentName = file.name;
@@ -454,10 +437,11 @@
 
             const payload = [{
                 crfId: item.crfId,
-                requestId: item.requestId,
+                requestId: item.requestId || null,
+                releaseDate: item.releaseDate,                    // ← Critical: Now sent!
                 workingStatus: item.workingStatus,
-                remarks: item.remarks?.trim(),
-                attachmentName: attachmentName || item.attachmentName,
+                remarks: item.remarks?.trim() || null,
+                attachmentName: attachmentName || item.attachmentName || null,
                 attachmentBase64: attachmentBase64,
                 attachmentMime: attachmentMime
             }];
@@ -474,10 +458,8 @@
                 });
 
                 if (res.ok) {
-                    // SUCCESS: Show toast + refresh only the table
                     showToast("Saved successfully!", "success");
-
-                    // Re-fetch only the data (no page reload!)
+                    // Refresh data with current filters
                     const currentFilters = {
                         fromDate: document.getElementById("fromDate").value,
                         toDate: document.getElementById("toDate").value,
@@ -485,7 +467,6 @@
                         testerTL: document.getElementById("testerTL").value || null,
                         testerName: document.getElementById("testerName").value || null
                     };
-
                     const formattedPayload = {
                         fromDate: formatDateForOracle(currentFilters.fromDate),
                         toDate: formatDateForOracle(currentFilters.toDate),
@@ -493,7 +474,6 @@
                         testerTL: currentFilters.testerTL,
                         testerName: currentFilters.testerName
                     };
-
                     const refreshRes = await fetch('/api/DailyVerification', {
                         method: 'POST',
                         headers: {
@@ -502,11 +482,9 @@
                         },
                         body: JSON.stringify(formattedPayload)
                     });
-
                     if (refreshRes.ok) {
                         const rawData = await refreshRes.json();
                         verificationData = rawData.map(item => normalizeKeys(item));
-
                         verificationData.forEach(item => {
                             item.crfId = item.CRF_ID || "N/A";
                             item.requestId = item.REQUEST_ID || "";
@@ -516,11 +494,8 @@
                             item.developer = item.DEVELOPER_NAME || "";
                             item.tester = item.TESTER_NAME || "";
                             item.releaseTypeText = item.RELEASE_TYPE || "";
-
                             const statusCode = item.WORKING_STATUS ? Number(item.WORKING_STATUS) : null;
-                            const verifiedToday = item.VERIFIED_ON &&
-                                new Date().toDateString() === new Date(item.VERIFIED_ON).toDateString();
-
+                            const verifiedToday = item.VERIFIED_ON && new Date().toDateString() === new Date(item.VERIFIED_ON).toDateString();
                             if (verifiedToday && statusCode) {
                                 item.workingStatus = STATUS_MAP[statusCode] || "";
                                 item.remarks = item.REMARKS || "";
@@ -532,37 +507,34 @@
                                 item.attachmentName = "";
                                 item.isConfirmed = false;
                             }
-
-                            // Parse history from new table
                             try {
                                 item.History = JSON.parse(item.HISTORY_JSON || "[]");
                             } catch {
                                 item.History = [];
                             }
                         });
-
                         filteredData = [...verificationData];
                         currentPage = 1;
                         updateTableAndPagination();
                     }
                 } else {
-                    showToast("Save failed!", "danger");
+                    const errorText = await res.text();
+                    showToast("Save failed! " + errorText, "danger");
                 }
             } catch (err) {
                 showToast("Error: " + err.message, "danger");
             }
         }
 
-        // Toast function (add this)
         function showToast(message, type = "success") {
             const toast = document.createElement("div");
             toast.className = `toast align-items-center text-white bg-${type} border-0 position-fixed bottom-0 end-0 m-3`;
             toast.style.zIndex = 9999;
             toast.innerHTML = `
-                <div class="d-flex">
-                    <div class="toast-body">${message}</div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                </div>`;
+                        <div class="d-flex">
+                            <div class="toast-body">${message}</div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                        </div>`;
             document.body.appendChild(toast);
             new bootstrap.Toast(toast).show();
             setTimeout(() => toast.remove(), 3000);
@@ -581,44 +553,41 @@
             const isDaily = type?.includes("Daily");
             const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
             const badgeText = isDaily ? "Daily" : "Exp.";
-
             let rows = "<p class='text-center text-muted py-5'>No history available</p>";
             if (history.length > 0) {
                 rows = history.map(h => `
-                    <div class="d-flex gap-3 py-3 border-bottom">
-                        <div class="flex-shrink-0">
-                            <div class="bg-${h.status_text === 'Working' ? 'success' : 'danger'} text-white rounded-circle d-flex align-items-center justify-content-center" style="width:46px;height:46px;">
-                                ${h.status_text[0]}
+                            <div class="d-flex gap-3 py-3 border-bottom">
+                                <div class="flex-shrink-0">
+                                    <div class="bg-${h.status_text === 'Working' ? 'success' : 'danger'} text-white rounded-circle d-flex align-items-center justify-content-center" style="width:46px;height:46px;">
+                                        ${h.status_text[0]}
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold text-${h.status_text === 'Working' ? 'success' : 'danger'}">${h.status_text || 'Unknown'}</div>
+                                    <small class="text-muted">by <strong>${h.verified_by || 'Unknown'}</strong> on ${h.verified_on}</small>
+                                    ${h.remarks ? `<div class="mt-2 p-3 bg-light rounded small">${h.remarks.replace(/\n/g, '<br>')}</div>` : '<em class="text-muted small">No remarks</em>'}
+                                    ${h.attachment_name ? `<div class="mt-2"><span class="badge bg-info text-dark">${h.attachment_name}</span></div>` : ''}
+                                </div>
                             </div>
-                        </div>
-                        <div class="flex-grow-1">
-                            <div class="fw-bold text-${h.status_text === 'Working' ? 'success' : 'danger'}">${h.status_text || 'Unknown'}</div>
-                            <small class="text-muted">by <strong>${h.verified_by || 'Unknown'}</strong> on ${h.verified_on}</small>
-                            ${h.remarks ? `<div class="mt-2 p-3 bg-light rounded small">${h.remarks.replace(/\n/g, '<br>')}</div>` : '<em class="text-muted small">No remarks</em>'}
-                            ${h.attachment_name ? `<div class="mt-2"><span class="badge bg-info text-dark">${h.attachment_name}</span></div>` : ''}
-                        </div>
-                    </div>
-                `).join('');
+                        `).join('');
             }
-
             const modalHtml = `
-                <div class="modal fade" id="historyModal" tabindex="-1">
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content border-0 shadow">
-                            <div class="modal-header bg-primary text-white">
-                                <h5 class="modal-title">Verification History: <strong>${crfId}</strong> <span class="badge ${badgeCls} ms-2">${badgeText}</span></h5>
-                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        <div class="modal fade" id="historyModal" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content border-0 shadow">
+                                    <div class="modal-header bg-primary text-white">
+                                        <h5 class="modal-title">Verification History: <strong>${crfId}</strong> <span class="badge ${badgeCls} ms-2">${badgeText}</span></h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+                                        ${rows}
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
-                                ${rows}
-                            </div>
-                            <div class="modal-footer">
-                                <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-
+                        </div>`;
             const div = document.createElement('div');
             div.innerHTML = modalHtml;
             document.body.appendChild(div.firstChild);
@@ -631,7 +600,5 @@
             loadFilterDropdowns();
         });
     </script>
-
-    <!-- Required for Excel Export -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 }
