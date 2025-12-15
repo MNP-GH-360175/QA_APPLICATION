@@ -23,12 +23,21 @@ namespace WebApplication10.Controllers
 
             if (fromDate.HasValue && toDate.HasValue)
             {
-                allProcedures = GetAllExecutionsInRange(fromDate.Value, toDate.Value, search.Trim());
+                // Get ALL executions (no limit)
+                allProcedures = GetAllExecutionsInRange(fromDate.Value, toDate.Value);
+
+                // Apply search server-side if needed (optional, but helps performance)
+                if (!string.IsNullOrEmpty(search))
+                {
+                    string lowerSearch = search.ToLower();
+                    allProcedures = allProcedures.Where(p => p.ModuleName.ToLower().Contains(lowerSearch)).ToList();
+                }
 
                 ViewBag.FromDate = fromDate.Value.ToString("yyyy-MM-dd");
                 ViewBag.ToDate = toDate.Value.ToString("yyyy-MM-dd");
                 ViewBag.SearchTerm = search;
                 ViewBag.ShowResults = true;
+                ViewBag.TotalRecords = allProcedures.Count;
             }
             else
             {
@@ -38,34 +47,10 @@ namespace WebApplication10.Controllers
                 ViewBag.ShowResults = false;
             }
 
-            // Pagination
-            int totalRecords = allProcedures.Count;
-            int totalPages = (int)Math.Ceiling((double)totalRecords / PageSize);
-            page = Math.Max(1, Math.Min(page, totalPages > 0 ? totalPages : 1));
-
-            var pagedProcedures = allProcedures
-                .Skip((page - 1) * PageSize)
-                .Take(PageSize)
-                .ToList();
-
-            // Add serial number based on current page
-            int snoStart = (page - 1) * PageSize + 1;
-            for (int i = 0; i < pagedProcedures.Count; i++)
-            {
-                pagedProcedures[i].SerialNo = snoStart + i;
-            }
-
-            ViewBag.CurrentPage = page;
-            ViewBag.TotalPages = totalPages;
-            ViewBag.HasPrevious = page > 1;
-            ViewBag.HasNext = page < totalPages;
-            ViewBag.TotalRecords = totalRecords;
-
             ViewBag.Today = DateTime.Today.ToString("dddd, dd MMMM yyyy");
 
-            return View(pagedProcedures);
+            return View(allProcedures); // Send ALL data to view
         }
-
         [HttpPost]
         [ValidateAntiForgeryToken]
         public IActionResult Index(string fromDate, string toDate, string searchTerm = "")
