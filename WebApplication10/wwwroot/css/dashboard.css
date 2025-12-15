@@ -188,3 +188,110 @@ body.sidebar-open {
 .sidebar-overlay.show {
     touch-action: none; /* Blocks all touch actions on overlay */
 }
+/* Custom styles - you can move these to dashboard.css later */
+.procedure-header {
+    background: linear-gradient(90deg, #007bff, #6610f2);
+    color: white;
+    text-align: center;
+    padding: 3.5rem 1rem;
+    margin: -20px -20px 40px -20px;
+    border-radius: 0 0 20px 20px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+}
+
+.date-badge {
+    background: rgba(255,255,255,0.9);
+    color: #212529;
+    font-size: 1.1rem;
+    padding: 0.6rem 1.4rem;
+    border-radius: 50px;
+    font-weight: 600;
+}
+
+.auto-refresh-text {
+    font-size: 1rem;
+    opacity: 0.9;
+    margin-top: 1rem;
+}
+
+.summary-card {
+    border-radius: 1rem;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+}
+
+    .summary-card:hover {
+        transform: translateY(-5px);
+    }
+
+.total-card {
+    border-left: 6px solid #007bff;
+}
+
+.success-card {
+    border-left: 6px solid #28a745;
+}
+
+.danger-card {
+    border-left: 6px solid #dc3545;
+}
+
+.procedure-table tbody tr.table-success {
+    background-color: #d4edda !important;
+    animation: fadeInSuccess 1s ease-in-out;
+}
+
+.procedure-table tbody tr.table-danger {
+    background-color: #f8d7da !important;
+    animation: fadeInDanger 1.2s ease-in-out;
+}
+
+@keyframes fadeInSuccess {
+    0% {
+        opacity: 0.6;
+        background-color: #c3e6cb;
+    }
+
+    100% {
+        opacity: 1;
+        background-color: #d4edda;
+    }
+}
+
+@keyframes fadeInDanger {
+    0% {
+        opacity: 0.6;
+        background-color: #f5c6cb;
+    }
+
+    100% {
+        opacity: 1;
+        background-color: #f8d7da;
+    }
+}
+/* Procedure Monitor Page Styles - Matches Daily Verification */
+.procedure-header h2 {
+    font-size: 2rem;
+    color: #007bff;
+}
+
+.summary-card {
+    transition: transform 0.2s;
+}
+
+    .summary-card:hover {
+        transform: translateY(-4px);
+    }
+
+.table-success {
+    background-color: #d1edff !important;
+}
+
+.table-danger {
+    background-color: #f8d7da !important;
+}
+
+.bg-light th {
+    background-color: #f8f9fa !important;
+    font-weight: 600;
+}
