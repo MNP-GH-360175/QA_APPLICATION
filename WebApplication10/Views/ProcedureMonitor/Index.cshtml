@@ -8,7 +8,7 @@
         <h2 class="mb-0 text-primary fw-bold">
             <i class="fas fa-microchip me-3"></i>Updation Log Monitor
         </h2>
-        <small class="text-muted">Live search for procedure executions</small>
+        <small class="text-muted">Live search and Excel-like sorting on In Time / Out Time</small>
     </div>
 
     <!-- Date Range Form -->
@@ -39,7 +39,7 @@
 
     @if (ViewBag.ShowResults == true)
     {
-        <!-- Live Search Box (Auto-filter as user types) -->
+        <!-- Live Search -->
         <div class="card shadow mb-4">
             <div class="card-header bg-info text-white fw-bold">
                 Search Procedure (Type to filter instantly)
@@ -50,12 +50,12 @@
             </div>
         </div>
 
-        <!-- Results Table with Pagination -->
+        <!-- Table with Sorting -->
         <div class="card shadow">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Updation Log Details</h5>
+                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Execution Details</h5>
                 <small id="recordInfo">
-                    Showing @Model.Count filtered record(s) | Page @ViewBag.CurrentPage of @ViewBag.TotalPages
+                    Showing @Model.Count record(s)
                 </small>
             </div>
             <div class="card-body p-0">
@@ -65,12 +65,16 @@
                             <tr>
                                 <th class="text-center" style="width:80px;">S.No</th>
                                 <th>Module / Procedure Name</th>
-                                <th class="text-center">In Time</th>
-                                <th class="text-center">Out Time</th>
+                                <th class="text-center sortable cursor-pointer" data-sort="inTime">
+                                    In Time <i class="fas fa-sort-down ms-1" id="inTimeIcon"></i>
+                                </th>
+                                <th class="text-center sortable cursor-pointer" data-sort="outTime">
+                                    Out Time <i class="fas fa-sort ms-1" id="outTimeIcon"></i>
+                                </th>
                                 <th class="text-center" style="width:160px;">Status</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="tableBody">
                             @if (Model == null || Model.Count == 0)
                             {
                                 <tr>
@@ -85,9 +89,12 @@
                                 foreach (var item in Model)
                                 {
                                     string rowClass = item.IsRunningToday ? "table-success" : "table-danger";
+                                    string inTimeSort = item.InTime == "-" ? "0000-00-00 00:00:00" : item.InTime.Replace(" AM", "").Replace(" PM", "");
+                                    string outTimeSort = item.OutTime == null ? "0000-00-00 00:00:00" : item.OutTime.Replace(" AM", "").Replace(" PM", "");
 
-                                    <tr class="@rowClass" data-module="@item.ModuleName.ToLower()">
-                                        <td class="text-center fw-bold">@item.SerialNo</td>
+                                    <tr class="@rowClass" data-module="@item.ModuleName.ToLower()"
+                                        data-in-time="@inTimeSort" data-out-time="@outTimeSort">
+                                        <td class="text-center fw-bold serial-no"></td>
                                         <td class="fw-medium">@item.ModuleName</td>
                                         <td class="text-center">@(string.IsNullOrEmpty(item.InTime) ? "-" : item.InTime)</td>
                                         <td class="text-center">
@@ -111,34 +118,6 @@
                         </tbody>
                     </table>
                 </div>
-
-                <!-- Pagination (preserves search via URL if needed, but live search is client-side) -->
-                @if (ViewBag.TotalPages > 1)
-                {
-                    <div class="card-footer bg-light d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="text-muted">
-                                Page @ViewBag.CurrentPage of @ViewBag.TotalPages
-                            </span>
-                        </div>
-                        <div>
-                            @if (ViewBag.HasPrevious)
-                            {
-                                <a href="@Url.Action("Index", new { fromDate = ViewBag.FromDate, toDate = ViewBag.ToDate, page = ViewBag.CurrentPage - 1 })"
-                                   class="btn btn-outline-primary me-2">
-                                    <i class="fas fa-chevron-left"></i> Previous
-                                </a>
-                            }
-                            @if (ViewBag.HasNext)
-                            {
-                                <a href="@Url.Action("Index", new { fromDate = ViewBag.FromDate, toDate = ViewBag.ToDate, page = ViewBag.CurrentPage + 1 })"
-                                   class="btn btn-outline-primary">
-                                    Next <i class="fas fa-chevron-right"></i>
-                                </a>
-                            }
-                        </div>
-                    </div>
-                }
             </div>
         </div>
     }
@@ -146,7 +125,7 @@
     {
         <div class="text-center py-5">
             <i class="fas fa-calendar-alt fa-5x text-muted mb-4"></i>
-            <h4 class="text-muted">Please select a date range and click Confirm to view Updation Log details</h4>
+            <h4 class="text-muted">Please select a date range and click Confirm to view execution details</h4>
         </div>
     }
 </div>
@@ -154,27 +133,118 @@
 @section Scripts {
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            const searchInput = document.getElementById("liveSearch");
-            const tableRows = document.querySelectorAll("#procedureTable tbody tr[data-module]");
+            const tableBody = document.getElementById("tableBody");
+            const rowsArray = Array.from(tableBody.querySelectorAll("tr[data-module]"));
+            const liveSearch = document.getElementById("liveSearch");
             const recordInfo = document.getElementById("recordInfo");
+            const inTimeHeader = document.querySelector("[data-sort='inTime']");
+            const outTimeHeader = document.querySelector("[data-sort='outTime']");
+            const inTimeIcon = document.getElementById("inTimeIcon");
+            const outTimeIcon = document.getElementById("outTimeIcon");
 
-            searchInput.addEventListener("input", function () {
-                const filter = searchInput.value.toLowerCase();
-                let visibleCount = 0;
+            let currentSort = { column: 'inTime', direction: 'desc' };
 
-                tableRows.forEach(row => {
-                    const moduleName = row.getAttribute("data-module");
-                    if (moduleName.includes(filter)) {
-                        row.style.display = "";
-                        visibleCount++;
+            // Parse time string like "11:48:35 AM" to comparable format
+            function parseTime(timeStr) {
+                if (timeStr === "-" || !timeStr) return new Date(0); // earliest for null
+                const [time, period] = timeStr.split(' ');
+                let [hours, minutes, seconds] = time.split(':').map(Number);
+                if (period === 'PM' && hours !== 12) hours += 12;
+                if (period === 'AM' && hours === 12) hours = 0;
+                const date = new Date();
+                date.setHours(hours, minutes, seconds);
+                return date;
+            }
+
+            function sortRows() {
+                const filter = liveSearch.value.toLowerCase();
+
+                let filteredRows = rowsArray.filter(row => {
+                    const module = row.getAttribute("data-module");
+                    return module.includes(filter);
+                });
+
+                filteredRows.sort((a, b) => {
+                    let aVal, bVal;
+
+                    if (currentSort.column === 'inTime') {
+                        aVal = parseTime(a.querySelector("td:nth-child(3)").textContent.trim());
+                        bVal = parseTime(b.querySelector("td:nth-child(3)").textContent.trim());
                     } else {
-                        row.style.display = "none";
+                        const aOut = a.querySelector("td:nth-child(4)");
+                        const bOut = b.querySelector("td:nth-child(4)");
+                        aVal = aOut.querySelector("i") ? new Date(0) : parseTime(aOut.textContent.trim());
+                        bVal = bOut.querySelector("i") ? new Date(0) : parseTime(bOut.textContent.trim());
+                    }
+
+                    if (currentSort.direction === 'asc') {
+                        return aVal - bVal;
+                    } else {
+                        return bVal - aVal;
                     }
                 });
 
-                // Update record count
-                recordInfo.textContent = `Showing ${visibleCount} filtered record(s) | Page @ViewBag.CurrentPage of @ViewBag.TotalPages`;
+                // Clear and re-append
+                tableBody.innerHTML = "";
+                filteredRows.forEach(row => tableBody.appendChild(row));
+
+                // Renumber
+                tableBody.querySelectorAll(".serial-no").forEach((td, i) => {
+                    td.textContent = i + 1;
+                });
+
+                // Update info
+                recordInfo.textContent = `Showing ${filteredRows.length} filtered record(s)`;
+            }
+
+            // Initial sort
+            sortRows();
+            inTimeIcon.className = "fas fa-sort-down ms-1";
+
+            // Header clicks
+            inTimeHeader.addEventListener("click", () => {
+                if (currentSort.column === 'inTime') {
+                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.column = 'inTime';
+                    currentSort.direction = 'desc';
+                }
+                updateIcons();
+                sortRows();
             });
+
+            outTimeHeader.addEventListener("click", () => {
+                if (currentSort.column === 'outTime') {
+                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.column = 'outTime';
+                    currentSort.direction = 'desc';
+                }
+                updateIcons();
+                sortRows();
+            });
+
+            function updateIcons() {
+                inTimeIcon.className = "fas fa-sort ms-1";
+                outTimeIcon.className = "fas fa-sort ms-1";
+
+                const activeIcon = currentSort.column === 'inTime' ? inTimeIcon : outTimeIcon;
+                activeIcon.className = currentSort.direction === 'asc' ? "fas fa-sort-up ms-1" : "fas fa-sort-down ms-1";
+            }
+
+            // Live search
+            liveSearch.addEventListener("input", sortRows);
         });
     </script>
+
+    <style>
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+            .sortable:hover {
+                background-color: #e9ecef !important;
+            }
+    </style>
 }
