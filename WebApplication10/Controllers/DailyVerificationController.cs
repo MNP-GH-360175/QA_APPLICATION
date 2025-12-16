@@ -5,6 +5,7 @@ using Oracle.ManagedDataAccess.Client;
 using System.Data;
 using Newtonsoft.Json;
 using System.Security.Claims;
+using Oracle.ManagedDataAccess.Types;
 
 namespace WebApplication10.Controllers
 {
@@ -88,12 +89,11 @@ namespace WebApplication10.Controllers
             using var conn = new OracleConnection(_connStr);
             await conn.OpenAsync();
 
-            // 1. Call master procedure to save in main table
+            // Only call the master procedure — it handles BOTH insert/update AND history archiving
             using var cmd = new OracleCommand("PROC_DAILY_VERIFICATION_MASTER", conn)
             {
                 CommandType = CommandType.StoredProcedure
             };
-
             cmd.Parameters.Add("p_flag", OracleDbType.Varchar2).Value = "SAVE";
             cmd.Parameters.Add("p_from_date", OracleDbType.Varchar2).Value = DBNull.Value;
             cmd.Parameters.Add("p_to_date", OracleDbType.Varchar2).Value = DBNull.Value;
@@ -105,37 +105,6 @@ namespace WebApplication10.Controllers
             cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
 
             await cmd.ExecuteNonQueryAsync();
-
-            // 2. Insert into history table (manual, reliable)
-            foreach (var item in items)
-            {
-                var statusCode = item.workingStatus switch
-                {
-                    "Working" => 1,
-                    "Not Working" => 2,
-                    "In Progress" => 3,
-                    "Data need to capture" => 4,
-                    "User feedback pending" => 5,
-                    _ => 1
-                };
-
-                using var cmdHist = new OracleCommand(@"
-                    INSERT INTO tbl_daily_verification_history 
-                    (crf_id, request_id, working_status, status_text, remarks, 
-                     attachment_name, verified_by, verified_on)
-                    VALUES (:crfId, :requestId, :status, :statusText, :remarks, 
-                     :attachment, :verifiedBy, SYSDATE)", conn);
-
-                cmdHist.Parameters.Add("crfId", OracleDbType.Varchar2).Value = item.crfId;
-                cmdHist.Parameters.Add("requestId", OracleDbType.Varchar2).Value = item.requestId ?? (object)DBNull.Value;
-                cmdHist.Parameters.Add("status", OracleDbType.Decimal).Value = statusCode;
-                cmdHist.Parameters.Add("statusText", OracleDbType.Varchar2).Value = item.workingStatus;
-                cmdHist.Parameters.Add("remarks", OracleDbType.Varchar2).Value = item.remarks ?? (object)DBNull.Value;
-                cmdHist.Parameters.Add("attachment", OracleDbType.Varchar2).Value = item.attachmentName ?? (object)DBNull.Value;
-                cmdHist.Parameters.Add("verifiedBy", OracleDbType.Varchar2).Value = userName;
-
-                await cmdHist.ExecuteNonQueryAsync();
-            }
 
             return Ok(new { message = "Saved successfully" });
         }
@@ -190,7 +159,50 @@ namespace WebApplication10.Controllers
                 testerNames = testerList
             });
         }
+        [HttpGet("Attachment/{crfId}/{releaseDate}")]
+        public async Task<IActionResult> GetAttachment(string crfId, string releaseDate)
+        {
+            if (string.IsNullOrWhiteSpace(crfId) || string.IsNullOrWhiteSpace(releaseDate))
+                return BadRequest("Invalid parameters");
+
+            // Parse releaseDate from "16-DEC-2025" format
+            if (!DateTime.TryParseExact(releaseDate, "dd-MMM-yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime relDate))
+                return BadRequest("Invalid date format");
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            using var cmd = new OracleCommand(@"
+        SELECT attachment, attachment_filename, attachment_mimetype
+        FROM tbl_release_verify
+        WHERE crf_id = :crfId
+          AND TRUNC(release_dt) = :releaseDt", conn);
+
+            cmd.Parameters.Add("crfId", OracleDbType.Varchar2).Value = crfId;
+            cmd.Parameters.Add("releaseDt", OracleDbType.Date).Value = relDate.Date;
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                var blob = reader["attachment"] as OracleBlob;
+                var fileName = reader["attachment_filename"]?.ToString() ?? "attachment";
+                var mime = reader["attachment_mimetype"]?.ToString() ?? "application/octet-stream";
+
+                if (blob == null || blob.IsNull || blob.Length == 0)
+                    return NotFound("No attachment found");
+
+                var stream = new MemoryStream();
+                await blob.CopyToAsync(stream);
+                stream.Position = 0;
+
+                // This enables download + allows inline view for browser-supported types (PDF, images, etc.)
+                return File(stream, mime, fileName);
+            }
+
+            return NotFound("Attachment not found");
+        }
     }
+
 
     public class FilterModel
     {
