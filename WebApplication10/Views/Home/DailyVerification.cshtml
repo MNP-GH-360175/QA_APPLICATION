@@ -271,7 +271,7 @@
                                 <td>${item.releaseDate}</td>
                                 <td><strong>${item.techlead}</strong></td>
                                 <td>${item.developer}</td>
-                                <td>${item.tester}</td>
+                                <td><strong>${item.tester}</strong></td>
                                 <td class="text-center align-middle">
                                     ${item.isConfirmed
                         ? `<span class="badge bg-success px-3 py-2 fs-7">${item.workingStatus}</span>
@@ -553,47 +553,92 @@
             const isDaily = type?.includes("Daily");
             const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
             const badgeText = isDaily ? "Daily" : "Exp.";
-            let rows = "<p class='text-center text-muted py-5'>No history available</p>";
-            if (history.length > 0) {
-                rows = history.map(h => `
-                            <div class="d-flex gap-3 py-3 border-bottom">
-                                <div class="flex-shrink-0">
-                                    <div class="bg-${h.status_text === 'Working' ? 'success' : 'danger'} text-white rounded-circle d-flex align-items-center justify-content-center" style="width:46px;height:46px;">
-                                        ${h.status_text[0]}
+
+            let timelineHtml = "";
+            if (history.length === 0) {
+                timelineHtml = `<p class='text-center text-muted py-5'>No verification history available</p>`;
+            } else {
+                // Sort by date descending (latest first)
+                history.sort((a, b) => new Date(b.verified_on) - new Date(a.verified_on));
+
+                timelineHtml = history.map((h, index) => {
+                    const initials = h.verified_by ? h.verified_by.trim().split(' ').map(n => n[0]).join('').toUpperCase() : '??';
+                    const statusColor =
+                        h.status_text === 'Working' ? 'bg-success' :
+                            h.status_text === 'Not Working' ? 'bg-danger' :
+                                h.status_text === 'In Progress' ? 'bg-warning' :
+                                    h.status_text === 'Data need to capture' ? 'bg-info' :
+                                        h.status_text === 'User feedback pending' ? 'bg-secondary' : 'bg-primary';
+
+                    return `
+                                <div class="d-flex gap-4 py-4 ${index < history.length - 1 ? 'border-bottom' : ''}">
+                                    <!-- Timeline dot + line -->
+                                    <div class="flex-shrink-0 position-relative">
+                                        <div class="bg-white rounded-circle border border-3 border-white shadow-sm d-flex align-items-center justify-content-center text-white fw-bold ${statusColor}" style="width:50px;height:50px;">
+                                            ${initials}
+                                        </div>
+                                        ${index < history.length - 1 ? '<div class="position-absolute top-50 start-50 translate-middle-x bg-light" style="width:2px; height:70px; margin-top:30px;"></div>' : ''}
                                     </div>
-                                </div>
-                                <div class="flex-grow-1">
-                                    <div class="fw-bold text-${h.status_text === 'Working' ? 'success' : 'danger'}">${h.status_text || 'Unknown'}</div>
-                                    <small class="text-muted">by <strong>${h.verified_by || 'Unknown'}</strong> on ${h.verified_on}</small>
-                                    ${h.remarks ? `<div class="mt-2 p-3 bg-light rounded small">${h.remarks.replace(/\n/g, '<br>')}</div>` : '<em class="text-muted small">No remarks</em>'}
-                                    ${h.attachment_name ? `<div class="mt-2"><span class="badge bg-info text-dark">${h.attachment_name}</span></div>` : ''}
-                                </div>
-                            </div>
-                        `).join('');
+                                    <!-- Content -->
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <h6 class="mb-1 fw-bold">${h.verified_by || 'Unknown User'}</h6>
+                                                <small class="text-muted">${h.verified_on || ''}</small>
+                                            </div>
+                                            <span class="badge ${statusColor} px-3 py-2">${h.status_text || 'Unknown'}</span>
+                                        </div>
+                                        ${h.remarks ? `
+                                        <div class="mt-3 p-3 bg-light rounded small border">
+                                            ${h.remarks.replace(/\n/g, '<br>')}
+                                        </div>` : '<em class="text-muted small mt-2 d-block">No remarks provided</em>'}
+                                                ${h.attachment_name ? `
+        <div class="mt-2">
+            <a href="/api/DailyVerification/Attachment/${encodeURIComponent(crfId)}/${encodeURIComponent(type.includes('Daily') ? '16-DEC-2025' : 'EXP-DATE')}"
+               target="_blank"
+               class="badge bg-info text-dark text-decoration-none">
+                <i class="fas fa-download me-1"></i>${h.attachment_name}
+            </a>
+        </div>` : ''}
+                                    </div>
+                                </div>`;
+                }).join('');
             }
+
             const modalHtml = `
-                        <div class="modal fade" id="historyModal" tabindex="-1">
+                        <div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel">
                             <div class="modal-dialog modal-lg">
-                                <div class="modal-content border-0 shadow">
+                                <div class="modal-content border-0 shadow-lg">
                                     <div class="modal-header bg-primary text-white">
-                                        <h5 class="modal-title">Verification History: <strong>${crfId}</strong> <span class="badge ${badgeCls} ms-2">${badgeText}</span></h5>
-                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                        <h5 class="modal-title" id="historyModalLabel">
+                                            Verification History: <strong>${crfId}</strong>
+                                            <span class="badge ${badgeCls} ms-2">${badgeText}</span>
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                                     </div>
-                                    <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
-                                        ${rows}
+                                    <div class="modal-body" style="max-height:70vh; overflow-y:auto;">
+                                        ${timelineHtml}
                                     </div>
-                                    <div class="modal-footer">
-                                        <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <div class="modal-footer border-0">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                                     </div>
                                 </div>
                             </div>
                         </div>`;
-            const div = document.createElement('div');
-            div.innerHTML = modalHtml;
-            document.body.appendChild(div.firstChild);
+
+            // Remove any existing modal first
+            const existing = document.getElementById('historyModal');
+            if (existing) existing.remove();
+
+            // Append and show
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
             const modal = new bootstrap.Modal('#historyModal');
             modal.show();
-            document.getElementById('historyModal').addEventListener('hidden.bs.modal', () => div.remove());
+
+            // Cleanup on hide
+            document.getElementById('historyModal').addEventListener('hidden.bs.modal', () => {
+                document.getElementById('historyModal').remove();
+            });
         }
 
         document.addEventListener("DOMContentLoaded", () => {
