@@ -86,7 +86,6 @@ namespace WebApplication10.Controllers
                 return RedirectToLogin();
 
             ViewBag.TesterTLs = GetTesterTLs();
-            ViewBag.TesterNames = GetTesterNames();
             return View();
         }
 
@@ -100,67 +99,65 @@ namespace WebApplication10.Controllers
         private List<SelectListItem> GetTesterTLs()
         {
             var list = new List<SelectListItem>
-            {
-                new SelectListItem { Text = "All TLs", Value = "" }
-            };
+    {
+        new SelectListItem { Text = "All TLs", Value = "" }
+    };
+
+            // Dictionary to map sub_team -> TL Name (only once, maintainable)
+            var subTeamToTL = new Dictionary<int, string>
+    {
+        { 1, "JIJIN E H" },
+        { 2, "MURUGESAN P" },
+        { 3, "NIKHIL SEKHAR" },
+        { 4, "SMINA BENNY" },
+        { 5, "VISAGH S" },
+        { 6, "JOBY JOSE" } // if needed
+    };
+
             using (var conn = new OracleConnection(_connStr))
             {
                 conn.Open();
                 var cmd = new OracleCommand(@"
-                    SELECT DISTINCT e.emp_name
-                    FROM mana0809.srm_testing st
-                    JOIN mana0809.employee_master e ON st.test_lead = e.emp_code
-                    WHERE st.test_lead IS NOT NULL
-                    ORDER BY e.emp_name", conn);
+            SELECT DISTINCT 
+                CASE
+                    WHEN t.sub_team = 1 THEN 'JIJIN E H'
+                    WHEN t.sub_team = 2 THEN 'MURUGESAN P'
+                    WHEN t.sub_team = 3 THEN 'NIKHIL SEKHAR'
+                    WHEN t.sub_team = 4 THEN 'SMINA BENNY'
+                    WHEN t.sub_team = 5 THEN 'VISAGH S'
+                    WHEN t.sub_team = 6 THEN 'JOBY JOSE'
+                    ELSE NULL
+                END AS tester_tl_name
+            FROM mana0809.srm_it_team_members t
+            JOIN mana0809.employee_master v ON t.member_id = v.emp_code
+            JOIN mana0809.srm_it_team c ON c.team_id = t.team_id
+            WHERE v.status_id = 1
+              AND t.team_id = 6  -- QA Team
+              AND t.sub_team IS NOT NULL
+              AND t.sub_team IN (1,2,3,4,5,6)
+            ORDER BY tester_tl_name", conn);
+
                 using (var reader = cmd.ExecuteReader())
                 {
                     while (reader.Read())
                     {
-                        list.Add(new SelectListItem
+                        var tlName = reader["tester_tl_name"].ToString();
+                        if (!string.IsNullOrWhiteSpace(tlName) && !list.Any(x => x.Value == tlName))
                         {
-                            Text = reader["emp_name"].ToString(),
-                            Value = reader["emp_name"].ToString()
-                        });
+                            list.Add(new SelectListItem
+                            {
+                                Text = tlName,
+                                Value = tlName
+                            });
+                        }
                     }
                 }
             }
-            var knownTLs = new[] { "NIKHIL SEKHAR", "VISAGH S", "JIJIN E H", "MURUGESAN P", "JOBY JOSE" };
-            foreach (var tl in knownTLs)
-            {
-                if (!list.Any(x => x.Value == tl))
-                    list.Add(new SelectListItem { Text = tl, Value = tl });
-            }
+
             return list.OrderBy(x => x.Text).ToList();
         }
 
-        private List<SelectListItem> GetTesterNames()
-        {
-            var list = new List<SelectListItem>
-            {
-                new SelectListItem { Text = "All Testers", Value = "" }
-            };
-            using (var conn = new OracleConnection(_connStr))
-            {
-                conn.Open();
-                var cmd = new OracleCommand(@"
-                    SELECT DISTINCT e.emp_name
-                    FROM mana0809.srm_test_assign ta
-                    JOIN mana0809.employee_master e ON ta.assign_to = e.emp_code
-                    WHERE ta.assign_to IS NOT NULL
-                    ORDER BY e.emp_name", conn);
-                using (var reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        list.Add(new SelectListItem
-                        {
-                            Text = reader["emp_name"].ToString(),
-                            Value = reader["emp_name"].ToString()
-                        });
-                    }
-                }
-            }
-            return list.OrderBy(x => x.Text).ToList();
-        }
+        
+        
     }
 }

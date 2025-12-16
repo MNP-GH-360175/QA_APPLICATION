@@ -36,13 +36,13 @@
                         <input type="date" class="form-control form-control-lg" id="toDate" required />
                         <div class="invalid-feedback">Required</div>
                     </div>
-                    <div class="col-lg-2 col-md-6">
+                    <div class="col-lg-2 col-md-6 d-none">
                         <label class="form-label fw-semibold">Tester TL</label>
                         <select class="form-select form-select-lg" id="testerTL">
                             <option value="">All TLs</option>
                         </select>
                     </div>
-                    <div class="col-lg-2 col-md-6">
+                    <div class="col-lg-2 col-md-6 d-none">
                         <label class="form-label fw-semibold">Tester Name</label>
                         <select class="form-select form-select-lg" id="testerName">
                             <option value="">All Testers</option>
@@ -141,19 +141,76 @@
         async function loadFilterDropdowns() {
             try {
                 const token = localStorage.getItem('jwtToken');
+                if (!token) return;
+
+                // Get current logged-in user name from JWT
+                let currentUserName = "Unknown";
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    currentUserName = payload.given_name || payload.name || payload.unique_name || "Unknown";
+                } catch (e) {
+                    console.error("Failed to parse JWT", e);
+                }
+
                 const res = await fetch('/api/DailyVerification/filters', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
-                if (!res.ok) throw new Error("Failed");
+                if (!res.ok) throw new Error("Failed to load filters");
                 const data = await res.json();
+
                 const tlSelect = document.getElementById("testerTL");
-                tlSelect.innerHTML = '<option value="">All TLs</option>';
-                data.testerTLs?.forEach(x => tlSelect.add(new Option(x.text, x.value)));
                 const testerSelect = document.getElementById("testerName");
-                testerSelect.innerHTML = '<option value="">All Testers</option>';
-                data.testerNames?.forEach(x => testerSelect.add(new Option(x.text, x.value)));
+
+                // Clear and add "All TLs" (optional - you can remove if not needed)
+                tlSelect.innerHTML = '<option value="">My TL</option>';
+                testerSelect.innerHTML = '<option value="">My Name</option>';
+
+                let userFound = false;
+
+                // Find user's TL and name
+                for (const tl of data.testerTLs || []) {
+                    const testersRes = await fetch(`/api/DailyVerification/testers/${encodeURIComponent(tl.value)}`, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (testersRes.ok) {
+                        const testers = await testersRes.json();
+                        if (testers.some(t => t.value.toUpperCase() === currentUserName.toUpperCase())) {
+                            // Found user's TL!
+                            tlSelect.innerHTML = `<option value="${tl.value}">${tl.text}</option>`;
+                            tlSelect.disabled = true; // Optional: lock it
+
+                            // Populate only this TL's testers
+                            testerSelect.innerHTML = '';
+                            testers.forEach(t => {
+                                const opt = new Option(t.text, t.value);
+                                if (t.value.toUpperCase() === currentUserName.toUpperCase()) {
+                                    opt.selected = true;
+                                    userFound = true;
+                                }
+                                testerSelect.add(opt);
+                            });
+                            testerSelect.disabled = true; // Optional: lock name too
+                            break;
+                        }
+                    }
+                }
+
+                // Fallback if not found in team structure
+                if (!userFound) {
+                    // Show all TLs and try to select user
+                    tlSelect.innerHTML = '<option value="">All TLs</option>';
+                    data.testerTLs?.forEach(x => tlSelect.add(new Option(x.text, x.value)));
+                    testerSelect.innerHTML = '<option value="">All Testers</option>';
+                    data.testerNames?.forEach(x => {
+                        const opt = new Option(x.text, x.value);
+                        if (x.value.toUpperCase() === currentUserName.toUpperCase()) opt.selected = true;
+                        testerSelect.add(opt);
+                    });
+                }
+
             } catch (err) {
-                console.error(err);
+                console.error("Error loading filters:", err);
+                showToast("Failed to load your team info", "danger");
             }
         }
 
@@ -176,13 +233,19 @@
                 }
             });
             if (!valid) return;
+            let currentUserName = "Unknown";
+            try {
+                const token = localStorage.getItem('jwtToken');
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                currentUserName = payload.given_name || payload.name || payload.unique_name || "Unknown";
+            } catch { }
 
             const payload = {
                 fromDate: formatDateForOracle(document.getElementById("fromDate").value),
                 toDate: formatDateForOracle(document.getElementById("toDate").value),
                 releaseType: document.getElementById("releaseType").value || null,
-                testerTL: document.getElementById("testerTL").value || null,
-                testerName: document.getElementById("testerName").value || null
+                testerTL:  null,
+                testerName: currentUserName
             };
 
             const token = localStorage.getItem('jwtToken');
@@ -205,7 +268,7 @@
                     item.releaseDate = item.RELEASE_DATE || "";
                     item.techlead = item.TECHLEAD_NAME || "Not Assigned";
                     item.developer = item.DEVELOPER_NAME || "Not Assigned";
-                    item.tester = item.TESTER_NAME || "Not Assigned";
+                    item.tester = item.TESTER_NAME ? item.TESTER_NAME.replace(/,/g, ', ') : "Not Assigned";
                     item.releaseTypeText = item.RELEASE_TYPE || "";
                     const statusCode = item.WORKING_STATUS ? Number(item.WORKING_STATUS) : null;
                     const verifiedToday = item.VERIFIED_ON && new Date().toDateString() === new Date(item.VERIFIED_ON).toDateString();

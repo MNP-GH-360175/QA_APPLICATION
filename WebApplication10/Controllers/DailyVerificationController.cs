@@ -159,6 +159,51 @@ namespace WebApplication10.Controllers
                 testerNames = testerList
             });
         }
+        [HttpGet("testers/{testerTL}")]
+        public async Task<IActionResult> GetTestersByTL(string testerTL)
+        {
+            if (string.IsNullOrWhiteSpace(testerTL))
+                return Ok(new List<object>());
+
+            var tlToSubTeam = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "JIJIN E H", 1 },
+        { "MURUGESAN P", 2 },
+        { "NIKHIL SEKHAR", 3 },
+        { "SMINA BENNY", 4 },
+        { "VISAGH S", 5 },
+        { "JOBY JOSE", 6 }
+    };
+
+            if (!tlToSubTeam.TryGetValue(testerTL.Trim(), out int subTeam))
+                return Ok(new List<object>());
+
+            var testers = new List<object>();
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            var cmd = new OracleCommand(@"
+        SELECT DISTINCT v.emp_name
+        FROM mana0809.srm_it_team_members t
+        JOIN mana0809.employee_master v ON t.member_id = v.emp_code
+        WHERE t.team_id = 6
+          AND t.sub_team = :subTeam
+          AND v.status_id = 1
+        ORDER BY v.emp_name", conn);
+
+            cmd.Parameters.Add("subTeam", OracleDbType.Int32).Value = subTeam;
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var name = reader["emp_name"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(name))
+                    testers.Add(new { text = name, value = name });
+            }
+
+            return Ok(testers);
+        }
         [HttpGet("Attachment/{crfId}/{releaseDate}")]
         public async Task<IActionResult> GetAttachment(string crfId, string releaseDate)
         {
