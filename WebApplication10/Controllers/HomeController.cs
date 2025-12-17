@@ -407,5 +407,89 @@ namespace WebApplication10.Controllers
             }
             return Json(list);
         }
+        [HttpGet]
+        public IActionResult KYCDeviationReport()
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+            return View(new KYCDeviationViewModel());
+        }
+
+        [HttpPost]
+        public IActionResult KYCDeviationReport(KYCDeviationViewModel model,string action)
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+
+            if (!model.FromDate.HasValue || !model.ToDate.HasValue)
+            {
+                TempData["ErrorMessage"] = "From Date and To Date are required.";
+                return View(model);
+            }
+
+            if (model.FromDate > model.ToDate)
+            {
+                TempData["ErrorMessage"] = "From Date cannot be greater than To Date.";
+                return View(model);
+            }
+
+            model.Results = GetKYCDeviationReport(model.FromDate.Value, model.ToDate.Value);
+
+            return View(model);
+        }
+
+        private List<KYCDeviationItem> GetKYCDeviationReport(DateTime fromDate, DateTime toDate)
+        {
+            var results = new List<KYCDeviationItem>();
+
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+            using var cmd = new OracleCommand("proc_KYC_DEVIATION_REPORT", conn);
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            cmd.Parameters.Add("p_from_date", OracleDbType.Date).Value = fromDate;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Date).Value = toDate;
+            cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                results.Add(new KYCDeviationItem
+                {
+                    SNo = reader.GetInt32(0),
+                    KYCDeviation = reader.GetString(1),
+                    Count = reader.GetInt32(2),
+                    Status = reader.IsDBNull(3) ? "" : reader.GetString(3)
+                });
+            }
+
+            return results;
+        }
+        [HttpGet]
+        public IActionResult DailyCustomerData()
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+
+            var model = new DailyCustomerDataViewModel();
+
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+
+            using var cmd = new OracleCommand("PROC_DAILY_CUSTOMER_DATA", conn);
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                model.TotalCustomers = reader.GetInt32("total_customers");
+                model.HypervergeCustomers = reader.GetInt32("hyperverge_customers");
+                model.JukshioCustomers = reader.GetInt32("jukshio_customers");
+                model.DoorstepCustomers = reader.GetInt32("doorstep_customers");
+                model.AadharCount = reader.GetInt32("aadhar_count");
+                model.DigiCount = reader.GetInt32("digi_count");
+                model.OtherIdCount = reader.GetInt32("other_id_count");
+            }
+
+            return View(model);
+        }
     }
 }

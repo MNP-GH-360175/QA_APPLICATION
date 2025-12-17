@@ -56,11 +56,21 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link" asp-controller="Home" asp-action="KYCDeviationReport">
+                    <i class="fas fa-exclamation-triangle me-2"></i>KYC Deviation Report
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" asp-controller="Home" asp-action="DailyCustomerData">
+                    <i class="fas fa-users me-2"></i>Daily Customer Data
+                </a>
+            </li>
+            @* <li class="nav-item">
                 <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "ReleaseStatus" ? "active" : "")"
                    href="/Home/ReleaseStatus">
                     <i class="fas fa-rocket"></i> Release Status
                 </a>
-            </li>
+            </li> *@
             <li class="nav-item">
                 <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "DailyVerification" ? "active" : "")"
                    href="/Home/DailyVerification">
