@@ -71,16 +71,14 @@ namespace WebApplication10.Controllers
         {
             var jwtSettings = _configuration.GetSection("Jwt");
             var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
-
             var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, empCode),
-                new Claim(ClaimTypes.Name, empCode),
-                new Claim(ClaimTypes.GivenName, empName),
-                new Claim(JwtRegisteredClaimNames.Sub, empCode),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-            };
-
+    {
+        new Claim(ClaimTypes.NameIdentifier, empCode),
+        new Claim(ClaimTypes.Name, empName), 
+        new Claim(ClaimTypes.GivenName, empName),
+        new Claim(JwtRegisteredClaimNames.Sub, empCode),
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+    };
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
@@ -88,7 +86,6 @@ namespace WebApplication10.Controllers
                 Issuer = jwtSettings["Issuer"],
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
-
             var tokenHandler = new JwtSecurityTokenHandler();
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);

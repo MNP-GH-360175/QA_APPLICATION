@@ -1,11 +1,15 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.IdentityModel.Tokens;
 using Oracle.ManagedDataAccess.Client;
-using System.Diagnostics;
+using System.Data;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
+using WebApplication10.Models;
+using ClosedXML.Excel;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using System.Diagnostics;
 
 namespace WebApplication10.Controllers
 {
@@ -28,13 +32,10 @@ namespace WebApplication10.Controllers
         [AllowAnonymous]
         public IActionResult Login() => View();
 
-        // PROTECTED PAGES - NOW WITH SERVER-SIDE AUTH CHECK
         private bool IsAuthenticated()
         {
-            var token = Request.Cookies["jwtToken"];  // Now from cookie!
-
-            if (string.IsNullOrEmpty(token))
-                return false;
+            var token = Request.Cookies["jwtToken"];
+            if (string.IsNullOrEmpty(token)) return false;
 
             try
             {
@@ -49,7 +50,6 @@ namespace WebApplication10.Controllers
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
-
                 handler.ValidateToken(token, validations, out _);
                 return true;
             }
@@ -59,32 +59,23 @@ namespace WebApplication10.Controllers
             }
         }
 
-        private IActionResult RedirectToLogin()
-        {
-            return RedirectToAction("Login", "Home");
-        }
+        private IActionResult RedirectToLogin() => RedirectToAction("Login", "Home");
 
         public IActionResult Dashboard()
         {
-            if (!IsAuthenticated())
-                return RedirectToLogin();
-
+            if (!IsAuthenticated()) return RedirectToLogin();
             return View();
         }
 
         public IActionResult DailyVerification()
         {
-            if (!IsAuthenticated())
-                return RedirectToLogin();
-
+            if (!IsAuthenticated()) return RedirectToLogin();
             return View();
         }
 
         public IActionResult ReleaseStatus()
         {
-            if (!IsAuthenticated())
-                return RedirectToLogin();
-
+            if (!IsAuthenticated()) return RedirectToLogin();
             ViewBag.TesterTLs = GetTesterTLs();
             return View();
         }
@@ -95,69 +86,326 @@ namespace WebApplication10.Controllers
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error() => View(new { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
 
-        // Get real Tester Team Leads from srm_testing.test_lead
         private List<SelectListItem> GetTesterTLs()
         {
-            var list = new List<SelectListItem>
-    {
-        new SelectListItem { Text = "All TLs", Value = "" }
-    };
+            var list = new List<SelectListItem> { new SelectListItem { Text = "All TLs", Value = "" } };
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+            var cmd = new OracleCommand(@"
+                SELECT DISTINCT
+                    CASE
+                        WHEN t.sub_team = 1 THEN 'JIJIN E H'
+                        WHEN t.sub_team = 2 THEN 'MURUGESAN P'
+                        WHEN t.sub_team = 3 THEN 'NIKHIL SEKHAR'
+                        WHEN t.sub_team = 4 THEN 'SMINA BENNY'
+                        WHEN t.sub_team = 5 THEN 'VISAGH S'
+                        WHEN t.sub_team = 6 THEN 'JOBY JOSE'
+                        ELSE NULL
+                    END AS tester_tl_name
+                FROM mana0809.srm_it_team_members t
+                JOIN mana0809.employee_master v ON t.member_id = v.emp_code
+                JOIN mana0809.srm_it_team c ON c.team_id = t.team_id
+                WHERE v.status_id = 1
+                  AND t.team_id = 6
+                  AND t.sub_team IS NOT NULL
+                  AND t.sub_team IN (1,2,3,4,5,6)
+                ORDER BY tester_tl_name", conn);
 
-            // Dictionary to map sub_team -> TL Name (only once, maintainable)
-            var subTeamToTL = new Dictionary<int, string>
-    {
-        { 1, "JIJIN E H" },
-        { 2, "MURUGESAN P" },
-        { 3, "NIKHIL SEKHAR" },
-        { 4, "SMINA BENNY" },
-        { 5, "VISAGH S" },
-        { 6, "JOBY JOSE" } // if needed
-    };
-
-            using (var conn = new OracleConnection(_connStr))
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
             {
-                conn.Open();
-                var cmd = new OracleCommand(@"
-            SELECT DISTINCT 
-                CASE
-                    WHEN t.sub_team = 1 THEN 'JIJIN E H'
-                    WHEN t.sub_team = 2 THEN 'MURUGESAN P'
-                    WHEN t.sub_team = 3 THEN 'NIKHIL SEKHAR'
-                    WHEN t.sub_team = 4 THEN 'SMINA BENNY'
-                    WHEN t.sub_team = 5 THEN 'VISAGH S'
-                    WHEN t.sub_team = 6 THEN 'JOBY JOSE'
-                    ELSE NULL
-                END AS tester_tl_name
-            FROM mana0809.srm_it_team_members t
-            JOIN mana0809.employee_master v ON t.member_id = v.emp_code
-            JOIN mana0809.srm_it_team c ON c.team_id = t.team_id
-            WHERE v.status_id = 1
-              AND t.team_id = 6  -- QA Team
-              AND t.sub_team IS NOT NULL
-              AND t.sub_team IN (1,2,3,4,5,6)
-            ORDER BY tester_tl_name", conn);
-
-                using (var reader = cmd.ExecuteReader())
+                var tlName = reader["tester_tl_name"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(tlName) && !list.Any(x => x.Value == tlName))
                 {
-                    while (reader.Read())
-                    {
-                        var tlName = reader["tester_tl_name"].ToString();
-                        if (!string.IsNullOrWhiteSpace(tlName) && !list.Any(x => x.Value == tlName))
-                        {
-                            list.Add(new SelectListItem
-                            {
-                                Text = tlName,
-                                Value = tlName
-                            });
-                        }
-                    }
+                    list.Add(new SelectListItem { Text = tlName, Value = tlName });
                 }
             }
-
             return list.OrderBy(x => x.Text).ToList();
         }
 
-        
-        
+        // ====================== QUERY STATUS MODULE ======================
+        [HttpGet]
+        public IActionResult QueryStatus(int? FilterDepartmentId = null, int? FilterModuleId = null, DateTime? FromDate = null, DateTime? ToDate = null, bool showResults = false)
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+
+            var model = new QueryViewModel
+            {
+                FilterDepartmentId = FilterDepartmentId,
+                FilterModuleId = FilterModuleId,
+                FromDate = FromDate,
+                ToDate = ToDate
+            };
+
+            if (showResults && model.FromDate.HasValue && model.ToDate.HasValue)
+            {
+                model.Results = GetQueryResults(model.FromDate, model.ToDate, model.FilterDepartmentId, model.FilterModuleId);
+                ViewBag.ShowResults = true;
+            }
+
+            return View(model);
+        }
+
+        [HttpPost]
+        public IActionResult QueryStatus(QueryViewModel model, string action)
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+
+            // Extract employee code and name from JWT claims
+            string enteredByCode = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                                ?? User.FindFirst("unique_name")?.Value
+                                ?? "UNKNOWN";
+
+            string displayName = User.FindFirst(ClaimTypes.Name)?.Value
+                              ?? User.FindFirst(ClaimTypes.GivenName)?.Value
+                              ?? enteredByCode
+                              ?? "UNKNOWN";
+
+            bool queryAdded = false;
+
+            // Handle Add New Query
+            if (action == "add" && model.DepartmentId.HasValue && model.ModuleId.HasValue && !string.IsNullOrWhiteSpace(model.Query))
+            {
+                using var conn = new OracleConnection(_connStr);
+                conn.Open();
+                try
+                {
+                    var nameCmd = new OracleCommand(@"
+                        SELECT intrl_dept_name, module_name
+                        FROM mana0809.srm_intrnl_cntrl_modules
+                        WHERE intrl_dept_id = :deptId
+                          AND module_id = :modId
+                          AND module_status = 1", conn);
+                    nameCmd.Parameters.Add("deptId", model.DepartmentId.Value);
+                    nameCmd.Parameters.Add("modId", model.ModuleId.Value);
+
+                    string deptName = "Unknown Department";
+                    string modName = "Unknown Module";
+                    using var reader = nameCmd.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        deptName = reader.GetString(0);
+                        modName = reader.GetString(1);
+                    }
+
+                    var insertCmd = new OracleCommand(@"
+                        INSERT INTO mana0809.Crf_Process_mst
+                        (DEPARTMENT_NAME, MODULE_NAME, CONTROL_NAME, QUERY_TEXT, ENTERED_BY)
+                        VALUES (:dept, :mod, :ctrl, :qry, :emp)", conn);
+
+                    insertCmd.Parameters.Add("dept", deptName);
+                    insertCmd.Parameters.Add("mod", modName);
+                    insertCmd.Parameters.Add("ctrl", string.IsNullOrWhiteSpace(model.ControlName) ? "Unnamed Activity" : model.ControlName.Trim());
+                    insertCmd.Parameters.Add("qry", model.Query.Trim());
+                    insertCmd.Parameters.Add("emp", enteredByCode);
+
+                    insertCmd.ExecuteNonQuery();
+                    queryAdded = true;
+                    TempData["SuccessMessage"] = $"Query '{model.ControlName?.Trim() ?? "New Query"}' submitted successfully by {displayName}!";
+                }
+                catch (Exception ex)
+                {
+                    TempData["ErrorMessage"] = "Failed to add query: " + ex.Message;
+                    _logger.LogError(ex, "Error adding query");
+                }
+            }
+
+            // Handle Filter Action - Validate dates only here
+            if (action == "filter")
+            {
+                if (!model.FromDate.HasValue || !model.ToDate.HasValue)
+                {
+                    TempData["ErrorMessage"] = "From Date and To Date are required to view results.";
+                    return RedirectToAction("QueryStatus", new
+                    {
+                        FilterDepartmentId = model.FilterDepartmentId,
+                        FilterModuleId = model.FilterModuleId,
+                        FromDate = model.FromDate,
+                        ToDate = model.ToDate
+                    });
+                }
+
+                if (model.FromDate > model.ToDate)
+                {
+                    TempData["ErrorMessage"] = "From Date cannot be greater than To Date.";
+                    return RedirectToAction("QueryStatus", new
+                    {
+                        FilterDepartmentId = model.FilterDepartmentId,
+                        FilterModuleId = model.FilterModuleId,
+                        FromDate = model.FromDate,
+                        ToDate = model.ToDate
+                    });
+                }
+
+                // Valid dates - show results
+                return RedirectToAction("QueryStatus", new
+                {
+                    FilterDepartmentId = model.FilterDepartmentId,
+                    FilterModuleId = model.FilterModuleId,
+                    FromDate = model.FromDate,
+                    ToDate = model.ToDate,
+                    showResults = true
+                });
+            }
+
+            // After adding query, optionally show results with current filters
+            if (queryAdded)
+            {
+                return RedirectToAction("QueryStatus", new
+                {
+                    FilterDepartmentId = model.FilterDepartmentId,
+                    FilterModuleId = model.FilterModuleId,
+                    FromDate = model.FromDate,
+                    ToDate = model.ToDate,
+                    showResults = model.FromDate.HasValue && model.ToDate.HasValue
+                });
+            }
+
+            return RedirectToAction("QueryStatus");
+        }
+
+        public IActionResult ExportToExcel(DateTime? fromDate, DateTime? toDate, int? deptId, int? modId)
+        {
+            var results = GetQueryResults(fromDate, toDate, deptId, modId);
+            var dt = new DataTable();
+            dt.Columns.Add("S NO"); dt.Columns.Add("Activity"); dt.Columns.Add("Status");
+            dt.Columns.Add("Count"); dt.Columns.Add("Tech Lead Name"); dt.Columns.Add("Tester Techlead");
+
+            for (int i = 0; i < results.Count; i++)
+            {
+                var r = results[i];
+                var row = dt.NewRow();
+                row["S NO"] = i + 1;
+                row["Activity"] = r.ControlName ?? r.ModuleName ?? "N/A";
+                row["Status"] = r.RowCount > 0 ? "Success" : "Failed";
+                row["Count"] = r.RowCount;
+                row["Tech Lead Name"] = r.TechLeadName ?? "";
+                row["Tester Techlead"] = r.TesterTechLead ?? "";
+                dt.Rows.Add(row);
+            }
+
+            using var workbook = new XLWorkbook();
+            workbook.Worksheets.Add(dt, "Query Status");
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+
+            return File(stream.ToArray(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"QueryStatus_{DateTime.Now:yyyyMMdd}.xlsx");
+        }
+
+        private List<QueryItem> GetQueryResults(DateTime? fromDate = null, DateTime? toDate = null, int? deptId = null, int? modId = null)
+        {
+            var results = new List<QueryItem>();
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+
+            string sql = @"
+                SELECT ID, DEPARTMENT_NAME, MODULE_NAME, CONTROL_NAME, QUERY_TEXT
+                FROM mana0809.Crf_Process_mst
+                WHERE 1 = 1";
+
+            if (deptId.HasValue && deptId.Value > 0)
+            {
+                sql += @"
+                    AND DEPARTMENT_NAME IN (
+                        SELECT intrl_dept_name
+                        FROM mana0809.srm_intrnl_cntrl_modules
+                        WHERE intrl_dept_id = :deptId
+                    )";
+            }
+
+            if (modId.HasValue && modId.Value > 0)
+            {
+                sql += @"
+                    AND MODULE_NAME IN (
+                        SELECT module_name
+                        FROM mana0809.srm_intrnl_cntrl_modules
+                        WHERE module_id = :modId
+                    )";
+            }
+
+            sql += " ORDER BY ID";
+
+            using var fetchCmd = new OracleCommand(sql, conn);
+            if (deptId.HasValue && deptId.Value > 0) fetchCmd.Parameters.Add("deptId", deptId.Value);
+            if (modId.HasValue && modId.Value > 0) fetchCmd.Parameters.Add("modId", modId.Value);
+
+            using var reader = fetchCmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var item = new QueryItem
+                {
+                    Id = reader.GetInt32(0),
+                    DepartmentName = reader.IsDBNull(1) ? null : reader.GetString(1),
+                    ModuleName = reader.IsDBNull(2) ? null : reader.GetString(2),
+                    ControlName = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    QueryText = reader.GetString(4)
+                };
+
+                try
+                {
+                    string userQuery = item.QueryText.Trim();
+                    if (userQuery.EndsWith(";"))
+                        userQuery = userQuery.Substring(0, userQuery.Length - 1).Trim();
+
+                    string safeCountQuery = $"SELECT COUNT(*) FROM ({userQuery}) sub";
+                    using var countCmd = new OracleCommand(safeCountQuery, conn);
+                    var result = countCmd.ExecuteScalar();
+                    item.RowCount = result != null && result != DBNull.Value
+                                    ? Convert.ToInt32(result)
+                                    : 0;
+                }
+                catch (Exception ex)
+                {
+                    item.RowCount = 0;
+                    _logger.LogWarning(ex, "Failed to execute query for {ControlName}", item.ControlName);
+                }
+
+                results.Add(item);
+            }
+
+            return results;
+        }
+
+        public JsonResult GetDepartments()
+        {
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+            var cmd = new OracleCommand(@"
+                SELECT DISTINCT intrl_dept_id, intrl_dept_name
+                FROM mana0809.srm_intrnl_cntrl_modules
+                WHERE module_status = 1
+                ORDER BY intrl_dept_name", conn);
+
+            var list = new List<object>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                list.Add(new { id = reader.GetInt32(0), name = reader.GetString(1) });
+            }
+            return Json(list);
+        }
+
+        public JsonResult GetModules(int deptId)
+        {
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+            var cmd = new OracleCommand(@"
+                SELECT module_id, module_name
+                FROM mana0809.srm_intrnl_cntrl_modules
+                WHERE intrl_dept_id = :deptId AND module_status = 1
+                ORDER BY module_name", conn);
+            cmd.Parameters.Add("deptId", deptId);
+
+            var list = new List<object>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                list.Add(new { id = reader.GetInt32(0), name = reader.GetString(1) });
+            }
+            return Json(list);
+        }
     }
 }
