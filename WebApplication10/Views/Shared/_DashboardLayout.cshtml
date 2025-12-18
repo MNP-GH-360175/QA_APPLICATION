@@ -1,28 +1,81 @@
-﻿<!DOCTYPE html>
+﻿@{
+    ViewData["Title"] = "Login";
+    Layout = null;
+}
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - QA PROJECT</title>
-
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/dashboard.css" asp-append-version="true" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
           integrity="sha512-..." crossorigin="anonymous" referrerpolicy="no-referrer" />
-
-    <!-- THIS LINE MAKES IT LOOK EXACTLY LIKE MANAPPURAM HR PORTAL -->
     <style>
-        html { font-size: 14px !important; }
-        body { font-size: 0.925rem; }
-        .form-control, .form-select { font-size: 0.925rem !important; }
-        .btn { font-size: 0.925rem !important; }
-        .table { font-size: 0.925rem; }
+        html {
+            font-size: 14px !important;
+        }
+
+        body {
+            font-size: 0.925rem;
+        }
+
+        .form-control, .form-select {
+            font-size: 0.925rem !important;
+        }
+
+        .btn {
+            font-size: 0.925rem !important;
+        }
+
+        .table {
+            font-size: 0.925rem;
+        }
+
+        /* CRF Alert Modal Style - Exact match to your screenshot */
+        .crf-alert-modal .modal-content {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .crf-alert-modal .modal-header {
+            background-color: #ffc107;
+            color: #000;
+            border-bottom: none;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 1.5rem;
+        }
+
+        .crf-alert-modal .modal-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+            .crf-alert-modal .modal-title i {
+                font-size: 1.5rem;
+                margin-right: 10px;
+                color: #d39e00;
+            }
+
+        .crf-alert-modal .modal-body {
+            padding: 1.5rem;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .crf-alert-modal .btn-primary {
+            background-color: #007bff;
+            border: none;
+            padding: 0.6rem 2rem;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
-
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
         <div class="container-fluid">
             <button class="menu-toggle me-3" id="menuToggle">
@@ -65,12 +118,6 @@
                     <i class="fas fa-users me-2"></i>Daily Customer Data
                 </a>
             </li>
-            @* <li class="nav-item">
-                <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "ReleaseStatus" ? "active" : "")"
-                   href="/Home/ReleaseStatus">
-                    <i class="fas fa-rocket"></i> Release Status
-                </a>
-            </li> *@
             <li class="nav-item">
                 <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "DailyVerification" ? "active" : "")"
                    href="/Home/DailyVerification">
@@ -119,6 +166,7 @@
             }
             document.getElementById('navbarUserName').textContent = empName;
 
+            // Sidebar toggle logic (unchanged)
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
             const toggle = document.getElementById('menuToggle');
@@ -127,9 +175,8 @@
             const openSidebar = () => {
                 sidebar.classList.add('show');
                 overlay.classList.add('show');
-                body.classList.add('sidebar-open'); // Triggers CSS lock
+                body.classList.add('sidebar-open');
             };
-
             const closeSidebar = () => {
                 sidebar.classList.remove('show');
                 overlay.classList.remove('show');
@@ -137,36 +184,72 @@
             };
 
             toggle.addEventListener('click', () => {
-                if (sidebar.classList.contains('show')) {
-                    closeSidebar();
-                } else {
-                    openSidebar();
-                }
+                sidebar.classList.contains('show') ? closeSidebar() : openSidebar();
             });
-
-            // Close only on overlay CLICK (not swipe/drag)
             overlay.addEventListener('click', closeSidebar);
 
-            // Optional: Add a close button inside sidebar if needed
-            // document.getElementById('closeSidebarBtn')?.addEventListener('click', closeSidebar);
+            // === CRF VERIFICATION ALERT ONLY ON DASHBOARD ===
+            const isDashboard = window.location.pathname === '/Home/Dashboard' ||
+                window.location.pathname === '/Home/Dashboard/' ||
+                window.location.pathname === '/';
 
-            // Prevent any touchmove that might interfere
-            document.addEventListener('touchmove', (e) => {
-                if (sidebar.classList.contains('show')) {
-                    // Only allow vertical scroll
-                    const touch = e.touches[0];
-                    const deltaX = Math.abs(touch.clientX - (touch.startX || touch.clientX));
-                    const deltaY = Math.abs(touch.clientY - (touch.startY || touch.clientY));
-                    touch.startX = touch.clientX;
-                    touch.startY = touch.clientY;
+            if (isDashboard) {
+                async function checkCRFVerificationAlert() {
+                    try {
+                        const res = await fetch('/api/Verification/myalerts', {
+                            headers: { 'Authorization': 'Bearer ' + token }
+                        });
 
-                    if (deltaX > deltaY && deltaX > 10) {
-                        e.preventDefault(); // Block horizontal swipe
+                        if (res.ok) {
+                            const alerts = await res.json();
+                            if (alerts.length > 0) {
+                                const message = alerts.map(a => a.message).join('<br><br>');
+
+                                const modalHtml = `
+                                            <div class="modal fade crf-alert-modal show" tabindex="-1" style="display: block; background: rgba(0,0,0,0.5);">
+                                                <div class="modal-dialog modal-dialog-centered">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title">
+                                                                <i class="fas fa-exclamation-triangle"></i>
+                                                                CRF Verification Alert
+                                                            </h5>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            ${message}
+                                                        </div>
+                                                        <div class="modal-footer justify-content-center border-0">
+                                                            <button type="button" class="btn btn-primary" id="crfAlertOk">
+                                                                OK
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>`;
+
+                                document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+                                document.getElementById('crfAlertOk').addEventListener('click', () => {
+                                    document.querySelector('.crf-alert-modal').remove();
+                                });
+
+                                // Auto close after 20 seconds
+                                setTimeout(() => {
+                                    if (document.querySelector('.crf-alert-modal')) {
+                                        document.querySelector('.crf-alert-modal').remove();
+                                    }
+                                }, 20000);
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("Could not check CRF alerts:", err);
                     }
                 }
-            }, { passive: false });
 
-            // Logout confirmation
+                checkCRFVerificationAlert();
+            }
+
+            // Logout
             document.getElementById('logoutBtn')?.addEventListener('click', e => {
                 e.preventDefault();
                 if (confirm('Are you sure you want to logout?')) {
@@ -176,7 +259,6 @@
             });
         });
     </script>
-
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
