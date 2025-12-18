@@ -1,0 +1,27 @@
+CREATE OR REPLACE PROCEDURE PROC_DAILY_VERIFICATION_WORKALERT AS
+  v_today DATE := TRUNC(SYSDATE);
+BEGIN
+  -- Insert alert for every CRF released today that has NO verification record today with verify_status = 1
+  INSERT INTO mana0809.tbl_ma_common_alert
+    (emp_code, module_id, entr_dt, alert_message, status)
+    SELECT DISTINCT ets.emp_code,
+                    3444566,
+                    SYSDATE,
+                    'CRF VERIFICATION PENDING - CRF ID: ' || n.crf_id,
+                    1
+      FROM mana0809.srm_dailyrelease_updn n
+      JOIN mana0809.srm_test_assign ts
+        ON ts.request_id = n.request_id
+      JOIN mana0809.employee_master ets
+        ON ts.assign_to = ets.emp_code
+     WHERE TRUNC(n.updated_on) = TRUNC(SYSDATE)
+       AND NOT EXISTS (SELECT 1
+              FROM mana0809.tbl_release_verify v
+             WHERE v.crf_id = n.crf_id
+               AND TRUNC(v.release_dt) = TRUNC(SYSDATE)
+               AND v.verify_status = 1);
+  COMMIT;
+
+
+END PROC_DAILY_VERIFICATION_WORKALERT;
+/

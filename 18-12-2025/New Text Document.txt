@@ -1,0 +1,89 @@
+PROC_DAILY_REPORTS_MASTER
+proc_daily_release_verification
+PROC_DAILY_VERIFICATION_MASTER
+proc_KYC_DEVIATION_REPORT
+PROC_DAILY_CUSTOMER_DATA     
+proc_update_release_verification
+PROC_DAILY_VERIFICATION_WORKALERT
+
+CREATE TABLE TBL_DAILY_REPORTS_ERROR_LOG (
+    error_id          NUMBER,
+    proc_name         VARCHAR2(100),
+    error_description VARCHAR2(250),
+    error_details     CLOB,
+    error_details1    VARCHAR2(1000),
+    error_details2    VARCHAR2(1000),
+    tra_dt            DATE DEFAULT SYSDATE,
+
+    CONSTRAINT PK_DAILY_REPORTS_ERROR_LOG PRIMARY KEY (error_id)
+);
+
+-- Sequence for error_id (recommended for auto-increment)
+CREATE SEQUENCE SEQ_DAILY_REPORTS_ERROR_LOG
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Optional Index on proc_name and tra_dt for faster querying
+CREATE INDEX IDX_DAILY_REPORTS_ERR_PROC ON TBL_DAILY_REPORTS_ERROR_LOG(proc_name);
+CREATE INDEX IDX_DAILY_REPORTS_ERR_DATE ON TBL_DAILY_REPORTS_ERROR_LOG(tra_dt);
+
+----------------------------------------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------------------------------------
+-- Replace 'YOUR_PROCEDURE_NAME' with your actual procedure name (e.g., PROC_DAILY_REPORTS_MASTER)
+-- Case-insensitive search
+------------------------------------To find the functions in procedure--------------------------
+SELECT 
+    owner,
+    name AS procedure_name,
+    type,
+    referenced_owner,
+    referenced_name AS called_function_or_procedure,
+    referenced_type
+FROM all_dependencies
+WHERE name = UPPER('PROC_DAILY_VERIFICATION_MASTER')
+  AND owner = 'MANA0809'  -- your schema
+  AND referenced_type = 'FUNCTION';
+--------------------------------------------------------------------------------------------------
+select t.,t.rowid from tbl_release_verify t where trunc(t.updated_on)=trunc(sysdate)  and t.verify_status=1--order by t.updated_on desc;
+
+select  from tbl_release_verify_history t where trunc(t.changed_on)=trunc(sysdate) order by t.changed_on desc;
+
+SELECT MAX(module_id) AS latest_module_id
+FROM mana0809.tbl_ma_common_alert;
+
+select  from tbl_ma_common_alert t where t.module_id=3444565;
+
+select t.,t.rowid from srm_dailyrelease_updn t where t.crf_id=104013;
+
+select t.,t.rowid from tbl_release_verify t where t.crf_id=104013;
+
+ INSERT INTO mana0809.tbl_ma_common_alert (
+        emp_code,
+        module_id,
+        entr_dt,
+        alert_message,
+        status,
+    ) values (empcode,3444566,sysdate,'CRF VERIFICATION PENDING',1 );
+    
+ SELECT DISTINCT ets.emp_code,
+                    3444566,
+                    SYSDATE,
+                    'CRF VERIFICATION PENDING - CRF ID '  n.crf_id,
+                    1
+      FROM mana0809.srm_dailyrelease_updn n
+      JOIN mana0809.srm_test_assign ts
+        ON ts.request_id = n.request_id
+      JOIN mana0809.employee_master ets
+        ON ts.assign_to = ets.emp_code
+     WHERE TRUNC(n.updated_on) = TRUNC(SYSDATE)
+       AND NOT EXISTS (SELECT 1
+              FROM mana0809.tbl_release_verify v
+             WHERE v.crf_id = n.crf_id
+               AND TRUNC(v.release_dt) = TRUNC(SYSDATE)
+               AND v.verify_status = 1);
+               
+select t.,t.rowid from tbl_ma_common_alert t where t.module_id=3444566 and trunc(t.entr_dt)=trunc(sysdate);

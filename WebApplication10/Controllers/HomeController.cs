@@ -415,7 +415,7 @@ namespace WebApplication10.Controllers
         }
 
         [HttpPost]
-        public IActionResult KYCDeviationReport(KYCDeviationViewModel model,string action)
+        public IActionResult KYCDeviationReport(KYCDeviationViewModel model, string action)
         {
             if (!IsAuthenticated()) return RedirectToLogin();
 
@@ -432,7 +432,6 @@ namespace WebApplication10.Controllers
             }
 
             model.Results = GetKYCDeviationReport(model.FromDate.Value, model.ToDate.Value);
-
             return View(model);
         }
 
@@ -440,14 +439,28 @@ namespace WebApplication10.Controllers
         {
             var results = new List<KYCDeviationItem>();
 
+            // Format dates as Oracle expects: DD-MON-YYYY (e.g., 18-DEC-2025)
+            string fromDateStr = fromDate.ToString("dd-MMM-yyyy").ToUpper();
+            string toDateStr = toDate.ToString("dd-MMM-yyyy").ToUpper();
+
             using var conn = new OracleConnection(_connStr);
             conn.Open();
-            using var cmd = new OracleCommand("proc_KYC_DEVIATION_REPORT", conn);
-            cmd.CommandType = CommandType.StoredProcedure;
+            using var cmd = new OracleCommand("PROC_DAILY_REPORTS_MASTER", conn)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
-            cmd.Parameters.Add("p_from_date", OracleDbType.Date).Value = fromDate;
-            cmd.Parameters.Add("p_to_date", OracleDbType.Date).Value = toDate;
-            cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+            // All parameters must be added in correct order (even if NULL)
+            cmd.Parameters.Add("p_flag", OracleDbType.Varchar2).Value = "KYC_DEVIATION";
+            cmd.Parameters.Add("p_sub_flag", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_from_date", OracleDbType.Varchar2).Value = fromDateStr;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Varchar2).Value = toDateStr;
+            cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_json_input", OracleDbType.Clob).Value = DBNull.Value;
+            cmd.Parameters.Add("p_updated_by", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
 
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
@@ -463,23 +476,35 @@ namespace WebApplication10.Controllers
 
             return results;
         }
+
         [HttpGet]
         public IActionResult DailyCustomerData()
         {
             if (!IsAuthenticated()) return RedirectToLogin();
-
             var model = new DailyCustomerDataViewModel();
 
             using var conn = new OracleConnection(_connStr);
             conn.Open();
+            using var cmd = new OracleCommand("PROC_DAILY_REPORTS_MASTER", conn)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
-            using var cmd = new OracleCommand("PROC_DAILY_CUSTOMER_DATA", conn);
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+            cmd.Parameters.Add("p_flag", OracleDbType.Varchar2).Value = "DAILY_CUSTOMER_DATA";
+            cmd.Parameters.Add("p_sub_flag", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_from_date", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_json_input", OracleDbType.Clob).Value = DBNull.Value;
+            cmd.Parameters.Add("p_updated_by", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
 
             using var reader = cmd.ExecuteReader();
             if (reader.Read())
             {
+                // Column names are lowercase in your procedure output
                 model.TotalCustomers = reader.GetInt32("total_customers");
                 model.HypervergeCustomers = reader.GetInt32("hyperverge_customers");
                 model.JukshioCustomers = reader.GetInt32("jukshio_customers");

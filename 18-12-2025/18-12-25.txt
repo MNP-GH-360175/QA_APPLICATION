@@ -1,0 +1,2234 @@
+create or replace procedure proc_lmslos_select(p_flag in varchar2,
+                                            p_pageval in varchar2,
+                                            p_parval1 in varchar2,
+                                            p_parval2 in varchar2,
+                                            p_parval3 in varchar2,
+                                            qry_result in OUT RESULT_TYPE.QRY_RESULT) is
+cnt             number;
+v_dtl1          array;
+p_OutMsg       varchar2(200);
+error_status   varchar2(200);
+error_message  varchar2(200);
+v_dtl15 array;
+chk number;
+begin
+
+   if p_pageval='Access' then
+         open QRY_RESULT for
+         select count(*) into chk  from form_accessibility t  where t.emp_id=p_parval1 and t.form_id=xxxx;
+      elsif p_pageval='MORATORIUMACCESS' then
+         open QRY_RESULT for
+         select count(*)  from form_accessibility t  where t.emp_id= p_parval1  and t.form_id=xxxx;
+
+      elsif p_Flag='CustomerMapping' then
+         proc_customer_mapping(p_pageval, p_parval1, p_parval2, p_parval3, QRY_RESULT);
+
+ elsif p_Flag='PropertyVisit' then
+         proc_nloan_property_visit(p_pageval, p_parval1, p_parval2, p_parval3, QRY_RESULT);
+
+ end if;
+end proc_lmslos_select;
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+PROC_DAILY_VERIFICATION_MASTER
+proc_KYC_DEVIATION_REPORT
+proc_update_release_verification
+PROC_DAILY_CUSTOMER_DATA     
+
+In my new module i'm  using this listed procedure for my backend activity 
+ However In my org , the above procedure commonly used to merge all procedures under single procedure for effeciency
+in pages they called this procedure like
+
+public static string categorynameshow(string typ, string val)
+        {
+            string result = "";
+            DataSet ds;
+            int i = 0;
+            LMSService.LMSServiceClient obj = new LMSService.LMSServiceClient();
+
+
+            ds = obj.LoansSelect("CustomerMapping", typ, val, "", "");
+            try
+            {
+
+
+                if (ds.Tables[0].Rows.Count > 0)
+                {
+                    foreach (DataRow dr in ds.Tables[0].Rows)
+                    {
+                        result = result + ds.Tables[0].Rows[i][0].ToString();
+                        i++;
+                    }
+
+                }
+                else
+                {
+                    return result;
+                }
+
+            }
+            catch (Exception ex)
+            {
+            }
+            return result; 
+------------------------------------------------------------------------------------------------------------------------
+i need this same type to call my every procedure under single procedure. but i'm using MVC 2022 visual studio so different may vary but my requirement need exact like the same.
+
+Here my controller
+// File: Controllers/DailyVerificationController.cs
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Oracle.ManagedDataAccess.Client;
+using System.Data;
+using Newtonsoft.Json;
+using System.Security.Claims;
+using Oracle.ManagedDataAccess.Types;
+
+namespace WebApplication10.Controllers
+{
+    [Authorize]
+    [Route("api/[controller]")]
+    [ApiController]
+    public class DailyVerificationController : ControllerBase
+    {
+        private readonly IConfiguration _config;
+        private readonly string _connStr;
+
+        public DailyVerificationController(IConfiguration config)
+        {
+            _config = config;
+            _connStr = _config.GetConnectionString("OracleConnection");
+        }
+
+        // FETCH: Get all CRFs with verification status
+        [HttpPost]
+        public async Task<IActionResult> Post([FromBody] FilterModel filters)
+        {
+            if (filters == null || string.IsNullOrWhiteSpace(filters.fromDate) || string.IsNullOrWhiteSpace(filters.toDate))
+                return BadRequest("Dates required");
+
+            var list = new List<object>();
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            using var cmd = new OracleCommand("PROC_DAILY_VERIFICATION_MASTER", conn)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            cmd.Parameters.Add("p_flag", OracleDbType.Varchar2).Value = "FETCH";
+            cmd.Parameters.Add("p_from_date", OracleDbType.Varchar2).Value = filters.fromDate;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Varchar2).Value = filters.toDate;
+            cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = filters.releaseType ?? (object)DBNull.Value;
+            cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = filters.testerTL ?? (object)DBNull.Value;
+            cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = filters.testerName ?? (object)DBNull.Value;
+            cmd.Parameters.Add("p_json_input", OracleDbType.Clob).Value = DBNull.Value;
+            cmd.Parameters.Add("p_updated_by", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+
+            using var rdr = await cmd.ExecuteReaderAsync();
+            while (await rdr.ReadAsync())
+            {
+                list.Add(new
+                {
+                    CRF_ID = rdr["CRF_ID"]?.ToString() ?? "N/A",
+                    REQUEST_ID = rdr["REQUEST_ID"]?.ToString() ?? "",
+                    CRF_NAME = rdr["CRF_NAME"]?.ToString() ?? "Unknown CRF",
+                    RELEASE_DATE = rdr["RELEASE_DATE"]?.ToString() ?? "",
+                    TECHLEAD_NAME = rdr["TECHLEAD_NAME"]?.ToString() ?? "",
+                    DEVELOPER_NAME = rdr["DEVELOPER_NAME"]?.ToString() ?? "",
+                    TESTER_NAME = rdr["TESTER_NAME"]?.ToString() ?? "",
+                    TESTER_TL_NAME = rdr["TESTER_TL_NAME"]?.ToString() ?? "",
+                    RELEASE_TYPE = rdr["RELEASE_TYPE"]?.ToString() ?? "",
+                    WORKING_STATUS = rdr["WORKING_STATUS"]?.ToString() ?? "",
+                    REMARKS = rdr["REMARKS"]?.ToString() ?? "",
+                    ATTACHMENT_NAME = rdr["ATTACHMENT_NAME"]?.ToString() ?? "",
+                    VERIFIED_BY = rdr["VERIFIED_BY"]?.ToString() ?? "",
+                    VERIFIED_ON = rdr["VERIFIED_ON"]?.ToString() ?? "",
+                    HISTORY_JSON = rdr["HISTORY_JSON"]?.ToString() ?? "[]"
+                });
+            }
+
+            return Ok(list);
+        }
+
+        // SAVE: Save verification + insert into history table
+        [HttpPost("Save")]
+        public async Task<IActionResult> Save([FromBody] List<SaveModel> items)
+        {
+            if (items == null || items.Count == 0)
+                return BadRequest("No data to save");
+
+            var userName = User.FindFirst(ClaimTypes.GivenName)?.Value ??
+                           User.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown User";
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            // Only call the master procedure — it handles BOTH insert/update AND history archiving
+            using var cmd = new OracleCommand("PROC_DAILY_VERIFICATION_MASTER", conn)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            cmd.Parameters.Add("p_flag", OracleDbType.Varchar2).Value = "SAVE";
+            cmd.Parameters.Add("p_from_date", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_json_input", OracleDbType.Clob).Value = JsonConvert.SerializeObject(items);
+            cmd.Parameters.Add("p_updated_by", OracleDbType.Varchar2).Value = userName;
+            cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+
+            await cmd.ExecuteNonQueryAsync();
+
+            return Ok(new { message = "Saved successfully" });
+        }
+
+        // GET FILTERS
+        [HttpGet("filters")]
+        public async Task<IActionResult> GetFilters()
+        {
+            var tlList = new List<object>();
+            var testerList = new List<object>();
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            using (var cmd = new OracleCommand(@"
+                SELECT DISTINCT est.emp_name AS name
+                FROM mana0809.srm_dailyrelease_updn n
+                JOIN mana0809.srm_testing st ON st.request_id = n.request_id
+                JOIN mana0809.employee_master est ON est.emp_code = st.test_lead
+                ORDER BY est.emp_name", conn))
+            {
+                using var rdr = await cmd.ExecuteReaderAsync();
+                while (await rdr.ReadAsync())
+                {
+                    var name = rdr["name"]?.ToString();
+                    if (!string.IsNullOrEmpty(name))
+                        tlList.Add(new { text = name, value = name });
+                }
+            }
+
+            using (var cmd = new OracleCommand(@"
+                SELECT DISTINCT TRIM(REGEXP_SUBSTR(tester, '[^,]+', 1, level)) AS name
+                FROM mana0809.srm_dailyrelease_updn
+                WHERE tester IS NOT NULL
+                CONNECT BY REGEXP_SUBSTR(tester, '[^,]+', 1, level) IS NOT NULL
+                  AND PRIOR dbms_random.value IS NOT NULL
+                  AND PRIOR sys_guid() IS NOT NULL
+                ORDER BY name", conn))
+            {
+                using var rdr = await cmd.ExecuteReaderAsync();
+                while (await rdr.ReadAsync())
+                {
+                    var name = rdr["name"]?.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(name))
+                        testerList.Add(new { text = name, value = name });
+                }
+            }
+
+            return Ok(new
+            {
+                testerTLs = tlList,
+                testerNames = testerList
+            });
+        }
+        [HttpGet("testers/{testerTL}")]
+        public async Task<IActionResult> GetTestersByTL(string testerTL)
+        {
+            if (string.IsNullOrWhiteSpace(testerTL))
+                return Ok(new List<object>());
+
+            var tlToSubTeam = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "JIJIN E H", 1 },
+        { "MURUGESAN P", 2 },
+        { "NIKHIL SEKHAR", 3 },
+        { "SMINA BENNY", 4 },
+        { "VISAGH S", 5 },
+        { "JOBY JOSE", 6 }
+    };
+
+            if (!tlToSubTeam.TryGetValue(testerTL.Trim(), out int subTeam))
+                return Ok(new List<object>());
+
+            var testers = new List<object>();
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            var cmd = new OracleCommand(@"
+        SELECT DISTINCT v.emp_name
+        FROM mana0809.srm_it_team_members t
+        JOIN mana0809.employee_master v ON t.member_id = v.emp_code
+        WHERE t.team_id = 6
+          AND t.sub_team = :subTeam
+          AND v.status_id = 1
+        ORDER BY v.emp_name", conn);
+
+            cmd.Parameters.Add("subTeam", OracleDbType.Int32).Value = subTeam;
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var name = reader["emp_name"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(name))
+                    testers.Add(new { text = name, value = name });
+            }
+
+            return Ok(testers);
+        }
+        [HttpGet("Attachment/{crfId}/{releaseDate}")]
+        public async Task<IActionResult> GetAttachment(string crfId, string releaseDate)
+        {
+            if (string.IsNullOrWhiteSpace(crfId) || string.IsNullOrWhiteSpace(releaseDate))
+                return BadRequest("Invalid parameters");
+
+            // Parse releaseDate from "16-DEC-2025" format
+            if (!DateTime.TryParseExact(releaseDate, "dd-MMM-yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime relDate))
+                return BadRequest("Invalid date format");
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            using var cmd = new OracleCommand(@"
+        SELECT attachment, attachment_filename, attachment_mimetype
+        FROM tbl_release_verify
+        WHERE crf_id = :crfId
+          AND TRUNC(release_dt) = :releaseDt", conn);
+
+            cmd.Parameters.Add("crfId", OracleDbType.Varchar2).Value = crfId;
+            cmd.Parameters.Add("releaseDt", OracleDbType.Date).Value = relDate.Date;
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                var blob = reader["attachment"] as OracleBlob;
+                var fileName = reader["attachment_filename"]?.ToString() ?? "attachment";
+                var mime = reader["attachment_mimetype"]?.ToString() ?? "application/octet-stream";
+
+                if (blob == null || blob.IsNull || blob.Length == 0)
+                    return NotFound("No attachment found");
+
+                var stream = new MemoryStream();
+                await blob.CopyToAsync(stream);
+                stream.Position = 0;
+
+                // This enables download + allows inline view for browser-supported types (PDF, images, etc.)
+                return File(stream, mime, fileName);
+            }
+
+            return NotFound("Attachment not found");
+        }
+    }
+
+
+    public class FilterModel
+    {
+        public required string fromDate { get; set; }
+        public required string toDate { get; set; }
+        public string? releaseType { get; set; }
+        public string? testerTL { get; set; }
+        public string? testerName { get; set; }
+    }
+
+    public class SaveModel
+    {
+        public required string crfId { get; set; }
+        public required string requestId { get; set; }  // <-- THIS WAS MISSING!
+        public required string workingStatus { get; set; }
+        public string remarks { get; set; } = "";
+        public string? attachmentName { get; set; }
+        public string? attachmentBase64 { get; set; }
+        public string? attachmentMime { get; set; }
+    }
+}
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
+using Oracle.ManagedDataAccess.Client;
+using System.Data;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using WebApplication10.Models;
+using ClosedXML.Excel;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using System.Diagnostics;
+
+namespace WebApplication10.Controllers
+{
+    public class HomeController : Controller
+    {
+        private readonly ILogger<HomeController> _logger;
+        private readonly IConfiguration _config;
+        private readonly string _connStr;
+
+        public HomeController(ILogger<HomeController> logger, IConfiguration config)
+        {
+            _logger = logger;
+            _config = config;
+            _connStr = _config.GetConnectionString("OracleConnection");
+        }
+
+        [AllowAnonymous]
+        public IActionResult Index() => View();
+
+        [AllowAnonymous]
+        public IActionResult Login() => View();
+
+        private bool IsAuthenticated()
+        {
+            var token = Request.Cookies["jwtToken"];
+            if (string.IsNullOrEmpty(token)) return false;
+
+            try
+            {
+                var handler = new JwtSecurityTokenHandler();
+                var validations = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"])),
+                    ValidateIssuer = true,
+                    ValidIssuer = _config["Jwt:Issuer"],
+                    ValidateAudience = false,
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.Zero
+                };
+                handler.ValidateToken(token, validations, out _);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private IActionResult RedirectToLogin() => RedirectToAction("Login", "Home");
+
+        public IActionResult Dashboard()
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+            return View();
+        }
+
+        public IActionResult DailyVerification()
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+            return View();
+        }
+
+        public IActionResult ReleaseStatus()
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+            ViewBag.TesterTLs = GetTesterTLs();
+            return View();
+        }
+
+        [AllowAnonymous]
+        public IActionResult Privacy() => View();
+
+        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+        public IActionResult Error() => View(new { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+
+        private List<SelectListItem> GetTesterTLs()
+        {
+            var list = new List<SelectListItem> { new SelectListItem { Text = "All TLs", Value = "" } };
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+            var cmd = new OracleCommand(@"
+                SELECT DISTINCT
+                    CASE
+                        WHEN t.sub_team = 1 THEN 'JIJIN E H'
+                        WHEN t.sub_team = 2 THEN 'MURUGESAN P'
+                        WHEN t.sub_team = 3 THEN 'NIKHIL SEKHAR'
+                        WHEN t.sub_team = 4 THEN 'SMINA BENNY'
+                        WHEN t.sub_team = 5 THEN 'VISAGH S'
+                        WHEN t.sub_team = 6 THEN 'JOBY JOSE'
+                        ELSE NULL
+                    END AS tester_tl_name
+                FROM mana0809.srm_it_team_members t
+                JOIN mana0809.employee_master v ON t.member_id = v.emp_code
+                JOIN mana0809.srm_it_team c ON c.team_id = t.team_id
+                WHERE v.status_id = 1
+                  AND t.team_id = 6
+                  AND t.sub_team IS NOT NULL
+                  AND t.sub_team IN (1,2,3,4,5,6)
+                ORDER BY tester_tl_name", conn);
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var tlName = reader["tester_tl_name"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(tlName) && !list.Any(x => x.Value == tlName))
+                {
+                    list.Add(new SelectListItem { Text = tlName, Value = tlName });
+                }
+            }
+            return list.OrderBy(x => x.Text).ToList();
+        }
+
+        // ====================== QUERY STATUS MODULE ======================
+        [HttpGet]
+        public IActionResult QueryStatus(int? FilterDepartmentId = null, int? FilterModuleId = null, DateTime? FromDate = null, DateTime? ToDate = null, bool showResults = false)
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+
+            var model = new QueryViewModel
+            {
+                FilterDepartmentId = FilterDepartmentId,
+                FilterModuleId = FilterModuleId,
+                FromDate = FromDate,
+                ToDate = ToDate
+            };
+
+            if (showResults && model.FromDate.HasValue && model.ToDate.HasValue)
+            {
+                model.Results = GetQueryResults(model.FromDate, model.ToDate, model.FilterDepartmentId, model.FilterModuleId);
+                ViewBag.ShowResults = true;
+            }
+
+            return View(model);
+        }
+
+        [HttpPost]
+        public IActionResult QueryStatus(QueryViewModel model, string action)
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+
+            // Extract employee code and name from JWT claims
+            string enteredByCode = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                                ?? User.FindFirst("unique_name")?.Value
+                                ?? "UNKNOWN";
+
+            string displayName = User.FindFirst(ClaimTypes.Name)?.Value
+                              ?? User.FindFirst(ClaimTypes.GivenName)?.Value
+                              ?? enteredByCode
+                              ?? "UNKNOWN";
+
+            bool queryAdded = false;
+
+            // Handle Add New Query
+            if (action == "add" && model.DepartmentId.HasValue && model.ModuleId.HasValue && !string.IsNullOrWhiteSpace(model.Query))
+            {
+                using var conn = new OracleConnection(_connStr);
+                conn.Open();
+                try
+                {
+                    var nameCmd = new OracleCommand(@"
+                        SELECT intrl_dept_name, module_name
+                        FROM mana0809.srm_intrnl_cntrl_modules
+                        WHERE intrl_dept_id = :deptId
+                          AND module_id = :modId
+                          AND module_status = 1", conn);
+                    nameCmd.Parameters.Add("deptId", model.DepartmentId.Value);
+                    nameCmd.Parameters.Add("modId", model.ModuleId.Value);
+
+                    string deptName = "Unknown Department";
+                    string modName = "Unknown Module";
+                    using var reader = nameCmd.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        deptName = reader.GetString(0);
+                        modName = reader.GetString(1);
+                    }
+
+                    var insertCmd = new OracleCommand(@"
+                        INSERT INTO mana0809.Crf_Process_mst
+                        (DEPARTMENT_NAME, MODULE_NAME, CONTROL_NAME, QUERY_TEXT, ENTERED_BY)
+                        VALUES (:dept, :mod, :ctrl, :qry, :emp)", conn);
+
+                    insertCmd.Parameters.Add("dept", deptName);
+                    insertCmd.Parameters.Add("mod", modName);
+                    insertCmd.Parameters.Add("ctrl", string.IsNullOrWhiteSpace(model.ControlName) ? "Unnamed Activity" : model.ControlName.Trim());
+                    insertCmd.Parameters.Add("qry", model.Query.Trim());
+                    insertCmd.Parameters.Add("emp", enteredByCode);
+
+                    insertCmd.ExecuteNonQuery();
+                    queryAdded = true;
+                    TempData["SuccessMessage"] = $"Query '{model.ControlName?.Trim() ?? "New Query"}' submitted successfully by {displayName}!";
+                }
+                catch (Exception ex)
+                {
+                    TempData["ErrorMessage"] = "Failed to add query: " + ex.Message;
+                    _logger.LogError(ex, "Error adding query");
+                }
+            }
+
+            // Handle Filter Action - Validate dates only here
+            if (action == "filter")
+            {
+                if (!model.FromDate.HasValue || !model.ToDate.HasValue)
+                {
+                    TempData["ErrorMessage"] = "From Date and To Date are required to view results.";
+                    return RedirectToAction("QueryStatus", new
+                    {
+                        FilterDepartmentId = model.FilterDepartmentId,
+                        FilterModuleId = model.FilterModuleId,
+                        FromDate = model.FromDate,
+                        ToDate = model.ToDate
+                    });
+                }
+
+                if (model.FromDate > model.ToDate)
+                {
+                    TempData["ErrorMessage"] = "From Date cannot be greater than To Date.";
+                    return RedirectToAction("QueryStatus", new
+                    {
+                        FilterDepartmentId = model.FilterDepartmentId,
+                        FilterModuleId = model.FilterModuleId,
+                        FromDate = model.FromDate,
+                        ToDate = model.ToDate
+                    });
+                }
+
+                // Valid dates - show results
+                return RedirectToAction("QueryStatus", new
+                {
+                    FilterDepartmentId = model.FilterDepartmentId,
+                    FilterModuleId = model.FilterModuleId,
+                    FromDate = model.FromDate,
+                    ToDate = model.ToDate,
+                    showResults = true
+                });
+            }
+
+            // After adding query, optionally show results with current filters
+            if (queryAdded)
+            {
+                return RedirectToAction("QueryStatus", new
+                {
+                    FilterDepartmentId = model.FilterDepartmentId,
+                    FilterModuleId = model.FilterModuleId,
+                    FromDate = model.FromDate,
+                    ToDate = model.ToDate,
+                    showResults = model.FromDate.HasValue && model.ToDate.HasValue
+                });
+            }
+
+            return RedirectToAction("QueryStatus");
+        }
+
+        public IActionResult ExportToExcel(DateTime? fromDate, DateTime? toDate, int? deptId, int? modId)
+        {
+            var results = GetQueryResults(fromDate, toDate, deptId, modId);
+            var dt = new DataTable();
+            dt.Columns.Add("S NO"); dt.Columns.Add("Activity"); dt.Columns.Add("Status");
+            dt.Columns.Add("Count"); dt.Columns.Add("Tech Lead Name"); dt.Columns.Add("Tester Techlead");
+
+            for (int i = 0; i < results.Count; i++)
+            {
+                var r = results[i];
+                var row = dt.NewRow();
+                row["S NO"] = i + 1;
+                row["Activity"] = r.ControlName ?? r.ModuleName ?? "N/A";
+                row["Status"] = r.RowCount > 0 ? "Success" : "Failed";
+                row["Count"] = r.RowCount;
+                row["Tech Lead Name"] = r.TechLeadName ?? "";
+                row["Tester Techlead"] = r.TesterTechLead ?? "";
+                dt.Rows.Add(row);
+            }
+
+            using var workbook = new XLWorkbook();
+            workbook.Worksheets.Add(dt, "Query Status");
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+
+            return File(stream.ToArray(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"QueryStatus_{DateTime.Now:yyyyMMdd}.xlsx");
+        }
+
+        private List<QueryItem> GetQueryResults(DateTime? fromDate = null, DateTime? toDate = null, int? deptId = null, int? modId = null)
+        {
+            var results = new List<QueryItem>();
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+
+            string sql = @"
+                SELECT ID, DEPARTMENT_NAME, MODULE_NAME, CONTROL_NAME, QUERY_TEXT
+                FROM mana0809.Crf_Process_mst
+                WHERE 1 = 1";
+
+            if (deptId.HasValue && deptId.Value > 0)
+            {
+                sql += @"
+                    AND DEPARTMENT_NAME IN (
+                        SELECT intrl_dept_name
+                        FROM mana0809.srm_intrnl_cntrl_modules
+                        WHERE intrl_dept_id = :deptId
+                    )";
+            }
+
+            if (modId.HasValue && modId.Value > 0)
+            {
+                sql += @"
+                    AND MODULE_NAME IN (
+                        SELECT module_name
+                        FROM mana0809.srm_intrnl_cntrl_modules
+                        WHERE module_id = :modId
+                    )";
+            }
+
+            sql += " ORDER BY ID";
+
+            using var fetchCmd = new OracleCommand(sql, conn);
+            if (deptId.HasValue && deptId.Value > 0) fetchCmd.Parameters.Add("deptId", deptId.Value);
+            if (modId.HasValue && modId.Value > 0) fetchCmd.Parameters.Add("modId", modId.Value);
+
+            using var reader = fetchCmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var item = new QueryItem
+                {
+                    Id = reader.GetInt32(0),
+                    DepartmentName = reader.IsDBNull(1) ? null : reader.GetString(1),
+                    ModuleName = reader.IsDBNull(2) ? null : reader.GetString(2),
+                    ControlName = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    QueryText = reader.GetString(4)
+                };
+
+                try
+                {
+                    string userQuery = item.QueryText.Trim();
+                    if (userQuery.EndsWith(";"))
+                        userQuery = userQuery.Substring(0, userQuery.Length - 1).Trim();
+
+                    string safeCountQuery = $"SELECT COUNT(*) FROM ({userQuery}) sub";
+                    using var countCmd = new OracleCommand(safeCountQuery, conn);
+                    var result = countCmd.ExecuteScalar();
+                    item.RowCount = result != null && result != DBNull.Value
+                                    ? Convert.ToInt32(result)
+                                    : 0;
+                }
+                catch (Exception ex)
+                {
+                    item.RowCount = 0;
+                    _logger.LogWarning(ex, "Failed to execute query for {ControlName}", item.ControlName);
+                }
+
+                results.Add(item);
+            }
+
+            return results;
+        }
+
+        public JsonResult GetDepartments()
+        {
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+            var cmd = new OracleCommand(@"
+                SELECT DISTINCT intrl_dept_id, intrl_dept_name
+                FROM mana0809.srm_intrnl_cntrl_modules
+                WHERE module_status = 1
+                ORDER BY intrl_dept_name", conn);
+
+            var list = new List<object>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                list.Add(new { id = reader.GetInt32(0), name = reader.GetString(1) });
+            }
+            return Json(list);
+        }
+
+        public JsonResult GetModules(int deptId)
+        {
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+            var cmd = new OracleCommand(@"
+                SELECT module_id, module_name
+                FROM mana0809.srm_intrnl_cntrl_modules
+                WHERE intrl_dept_id = :deptId AND module_status = 1
+                ORDER BY module_name", conn);
+            cmd.Parameters.Add("deptId", deptId);
+
+            var list = new List<object>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                list.Add(new { id = reader.GetInt32(0), name = reader.GetString(1) });
+            }
+            return Json(list);
+        }
+        [HttpGet]
+        public IActionResult KYCDeviationReport()
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+            return View(new KYCDeviationViewModel());
+        }
+
+        [HttpPost]
+        public IActionResult KYCDeviationReport(KYCDeviationViewModel model,string action)
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+
+            if (!model.FromDate.HasValue || !model.ToDate.HasValue)
+            {
+                TempData["ErrorMessage"] = "From Date and To Date are required.";
+                return View(model);
+            }
+
+            if (model.FromDate > model.ToDate)
+            {
+                TempData["ErrorMessage"] = "From Date cannot be greater than To Date.";
+                return View(model);
+            }
+
+            model.Results = GetKYCDeviationReport(model.FromDate.Value, model.ToDate.Value);
+
+            return View(model);
+        }
+
+        private List<KYCDeviationItem> GetKYCDeviationReport(DateTime fromDate, DateTime toDate)
+        {
+            var results = new List<KYCDeviationItem>();
+
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+            using var cmd = new OracleCommand("proc_KYC_DEVIATION_REPORT", conn);
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            cmd.Parameters.Add("p_from_date", OracleDbType.Date).Value = fromDate;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Date).Value = toDate;
+            cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                results.Add(new KYCDeviationItem
+                {
+                    SNo = reader.GetInt32(0),
+                    KYCDeviation = reader.GetString(1),
+                    Count = reader.GetInt32(2),
+                    Status = reader.IsDBNull(3) ? "" : reader.GetString(3)
+                });
+            }
+
+            return results;
+        }
+        [HttpGet]
+        public IActionResult DailyCustomerData()
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+
+            var model = new DailyCustomerDataViewModel();
+
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+
+            using var cmd = new OracleCommand("PROC_DAILY_CUSTOMER_DATA", conn);
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                model.TotalCustomers = reader.GetInt32("total_customers");
+                model.HypervergeCustomers = reader.GetInt32("hyperverge_customers");
+                model.JukshioCustomers = reader.GetInt32("jukshio_customers");
+                model.DoorstepCustomers = reader.GetInt32("doorstep_customers");
+                model.AadharCount = reader.GetInt32("aadhar_count");
+                model.DigiCount = reader.GetInt32("digi_count");
+                model.OtherIdCount = reader.GetInt32("other_id_count");
+            }
+
+            return View(model);
+        }
+    }
+}
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Oracle.ManagedDataAccess.Client;
+using System;
+using System.Collections.Generic;
+using WebApplication10.Models;
+
+namespace WebApplication10.Controllers
+{
+    public class ProcedureMonitorController : Controller
+    {
+        private readonly string _oracleConnectionString;
+        private const int PageSize = 10;
+
+        public ProcedureMonitorController(IConfiguration configuration)
+        {
+            _oracleConnectionString = configuration.GetConnectionString("OracleConnection");
+        }
+
+        public IActionResult Index(DateTime? fromDate = null, DateTime? toDate = null, string search = "", int page = 1)
+        {
+            List<ProcedureStatusViewModel> allProcedures = new List<ProcedureStatusViewModel>();
+
+            if (fromDate.HasValue && toDate.HasValue)
+            {
+                // Get ALL executions (no limit)
+                allProcedures = GetAllExecutionsInRange(fromDate.Value, toDate.Value);
+
+                // Apply search server-side if needed (optional, but helps performance)
+                if (!string.IsNullOrEmpty(search))
+                {
+                    string lowerSearch = search.ToLower();
+                    allProcedures = allProcedures.Where(p => p.ModuleName.ToLower().Contains(lowerSearch)).ToList();
+                }
+
+                ViewBag.FromDate = fromDate.Value.ToString("yyyy-MM-dd");
+                ViewBag.ToDate = toDate.Value.ToString("yyyy-MM-dd");
+                ViewBag.SearchTerm = search;
+                ViewBag.ShowResults = true;
+                ViewBag.TotalRecords = allProcedures.Count;
+            }
+            else
+            {
+                ViewBag.FromDate = DateTime.Today.ToString("yyyy-MM-dd");
+                ViewBag.ToDate = DateTime.Today.ToString("yyyy-MM-dd");
+                ViewBag.SearchTerm = "";
+                ViewBag.ShowResults = false;
+            }
+
+            ViewBag.Today = DateTime.Today.ToString("dddd, dd MMMM yyyy");
+
+            return View(allProcedures); // Send ALL data to view
+        }
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult Index(string fromDate, string toDate, string searchTerm = "")
+        {
+            DateTime parsedFrom = DateTime.Parse(fromDate);
+            DateTime parsedTo = DateTime.Parse(toDate);
+
+            return RedirectToAction("Index", new { fromDate = parsedFrom, toDate = parsedTo, search = searchTerm });
+        }
+
+        private List<ProcedureStatusViewModel> GetAllExecutionsInRange(DateTime fromDate, DateTime toDate, string searchTerm = "")
+        {
+            var result = new List<ProcedureStatusViewModel>();
+
+            string query = @"
+                SELECT MODULE, IN_TIME, OUT_TIME
+                FROM mana0809.updation_log
+                WHERE TRUNC(IN_TIME) BETWEEN :FromDate AND :ToDate
+                " + (!string.IsNullOrEmpty(searchTerm) ? "AND UPPER(MODULE) LIKE '%' || UPPER(:SearchTerm) || '%'" : "") + @"
+                ORDER BY IN_TIME DESC";
+
+            using (var connection = new OracleConnection(_oracleConnectionString))
+            using (var cmd = new OracleCommand(query, connection))
+            {
+                cmd.Parameters.Add("FromDate", OracleDbType.Date).Value = fromDate.Date;
+                cmd.Parameters.Add("ToDate", OracleDbType.Date).Value = toDate.Date;
+
+                if (!string.IsNullOrEmpty(searchTerm))
+                {
+                    cmd.Parameters.Add("SearchTerm", OracleDbType.Varchar2).Value = searchTerm;
+                }
+
+                connection.Open();
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        string module = reader["MODULE"]?.ToString()?.Trim() ?? "Unknown";
+                        var inTimeDb = reader["IN_TIME"] as DateTime?;
+                        var outTimeDb = reader["OUT_TIME"] as DateTime?;
+
+                        string inStr = inTimeDb.HasValue ? inTimeDb.Value.ToString("hh:mm:ss tt") : "-";
+                        string outStr = outTimeDb.HasValue ? outTimeDb.Value.ToString("hh:mm:ss tt") : null;
+
+                        bool isWorking = inTimeDb.HasValue && outTimeDb.HasValue;
+                        string statusText = isWorking ? "Working" : "Not Working";
+
+                        result.Add(new ProcedureStatusViewModel
+                        {
+                            ModuleName = module,
+                            InTime = inStr,
+                            OutTime = outStr,
+                            IsRunningToday = isWorking,
+                            StatusText = statusText
+                        });
+                    }
+                }
+            }
+
+            return result;
+        }
+    }
+}
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Oracle.ManagedDataAccess.Client;
+using System.Data;
+
+namespace WebApplication10.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]
+    public class QAVerificationController : ControllerBase
+    {
+        private readonly IConfiguration _config;
+        private readonly string _connStr;
+
+        public QAVerificationController(IConfiguration config)
+        {
+            _config = config;
+            _connStr = config.GetConnectionString("OracleConnection");
+        }
+
+        [HttpPost("save")]
+        public async Task<IActionResult> SaveVerification([FromBody] VerificationRequest request)
+        {
+            var empCode = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+            var empName = User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? "Unknown";
+
+            if (string.IsNullOrEmpty(empCode))
+                return Unauthorized("User not authenticated");
+
+            if (string.IsNullOrEmpty(request.CrfId) || string.IsNullOrEmpty(request.WorkingStatus))
+                return BadRequest("CRF ID and Working Status are required");
+
+            // File size check (≤10 MB)
+            if (!string.IsNullOrEmpty(request.AttachmentBase64))
+            {
+                try
+                {
+                    var bytes = Convert.FromBase64String(request.AttachmentBase64);
+                    if (bytes.Length > 10 * 1024 * 1024)
+                        return BadRequest("Attachment size must be ≤ 10 MB");
+                }
+                catch
+                {
+                    return BadRequest("Invalid attachment data");
+                }
+            }
+
+            using (var conn = new OracleConnection(_connStr))
+            {
+                await conn.OpenAsync();
+                using (var cmd = new OracleCommand("proc_qa_verification", conn))
+                {
+                    cmd.CommandType = CommandType.StoredProcedure;
+
+                    // Input parameters
+                    cmd.Parameters.Add("p_crf_id", OracleDbType.Varchar2).Value = request.CrfId;
+                    cmd.Parameters.Add("p_working_status", OracleDbType.Varchar2).Value = request.WorkingStatus;
+                    cmd.Parameters.Add("p_remarks", OracleDbType.Varchar2).Value = 
+                        string.IsNullOrEmpty(request.Remarks) ? (object)DBNull.Value : request.Remarks.Length > 4000 
+                            ? request.Remarks.Substring(0, 4000) : request.Remarks;
+
+                    cmd.Parameters.Add("p_attachment_name", OracleDbType.Varchar2).Value = 
+                        string.IsNullOrEmpty(request.AttachmentName) ? (object)DBNull.Value : request.AttachmentName;
+
+                    if (!string.IsNullOrEmpty(request.AttachmentBase64))
+                    {
+                        var blobData = Convert.FromBase64String(request.AttachmentBase64);
+                        cmd.Parameters.Add("p_attachment_data", OracleDbType.Blob).Value = blobData;
+                    }
+                    else
+                    {
+                        cmd.Parameters.Add("p_attachment_data", OracleDbType.Blob).Value = DBNull.Value;
+                    }
+
+                    cmd.Parameters.Add("p_attachment_mime", OracleDbType.Varchar2).Value = 
+                        string.IsNullOrEmpty(request.AttachmentMime) ? (object)DBNull.Value : request.AttachmentMime;
+
+                    cmd.Parameters.Add("p_verified_by", OracleDbType.Varchar2).Value = empCode;
+                    cmd.Parameters.Add("p_verified_by_name", OracleDbType.Varchar2).Value = empName;
+
+                    // Output parameters
+                    var resultParam = cmd.Parameters.Add("p_result", OracleDbType.Varchar2);
+                    resultParam.Direction = ParameterDirection.Output;
+                    resultParam.Size = 4000;
+
+                    var verIdParam = cmd.Parameters.Add("p_verification_id", OracleDbType.Decimal);
+                    verIdParam.Direction = ParameterDirection.Output;
+
+                    try
+                    {
+                        await cmd.ExecuteNonQueryAsync();
+
+                        string result = resultParam.Value?.ToString() ?? "UNKNOWN";
+                        string verId = verIdParam.Value?.ToString() ?? "0";
+
+                        if (result == "SUCCESS")
+                        {
+                            return Ok(new
+                            {
+                                success = true,
+                                message = "Verification saved successfully",
+                                verification_id = verId
+                            });
+                        }
+                        else
+                        {
+                            return BadRequest(new { success = false, message = result });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, new { success = false, message = "Database error: " + ex.Message });
+                    }
+                }
+            }
+        }
+    }
+
+    public class VerificationRequest
+    {
+        public string CrfId { get; set; } = string.Empty;
+        public string WorkingStatus { get; set; } = string.Empty;
+        public string? Remarks { get; set; }
+        public string? AttachmentName { get; set; }
+        public string? AttachmentBase64 { get; set; }
+        public string? AttachmentMime { get; set; }
+    }
+}
+here my procedure 
+CREATE OR REPLACE PROCEDURE PROC_DAILY_CUSTOMER_DATA(
+    p_cursor OUT SYS_REFCURSOR
+) AS
+BEGIN
+    OPEN p_cursor FOR
+    SELECT 
+        COUNT(t.cust_id) AS total_customers,
+        COUNT(hy.cust_id) AS hyperverge_customers,
+        COUNT(jk.cust_id) AS jukshio_customers,
+        COUNT(ds.cust_id) AS doorstep_customers,
+        COUNT(ac.cust_id) AS aadhar_count,
+        COUNT(dg.cust_id) AS digi_count,
+        COUNT(oc.cust_id) AS other_id_count
+    FROM mana0809.customer t
+    LEFT JOIN (
+        SELECT a.cust_id
+        FROM mana0809.tbl_hyperverge_log a
+        WHERE a.status = 'IN'
+          AND a.cust_id IS NOT NULL
+          AND TRUNC(a.tra_date) = TRUNC(SYSDATE)
+    ) hy ON t.cust_id = hy.cust_id
+    LEFT JOIN (
+        SELECT c.cust_id
+        FROM mana0809.tbl_jukshio_log c
+        WHERE c.status = 'completed'
+          AND c.cust_id IS NOT NULL
+          AND TRUNC(c.tra_date) = TRUNC(SYSDATE)
+    ) jk ON t.cust_id = jk.cust_id
+    LEFT JOIN (
+        SELECT g.cust_id
+        FROM mana0809.tbl_hyperverge_log g
+        WHERE g.status = 'IN'
+          AND g.cust_id IS NOT NULL
+          AND SUBSTR(g.ref_id, 6, 2) = 'DS'
+          AND TRUNC(g.tra_date) = TRUNC(SYSDATE)
+    ) ds ON t.cust_id = ds.cust_id
+    LEFT JOIN (
+        SELECT j.cust_id
+        FROM mana0809.identity_dtl j
+        WHERE j.identity_id IN (16, 505)
+    ) ac ON t.cust_id = ac.cust_id
+    LEFT JOIN (
+        SELECT kk.cust_id FROM mana0809.tbl_jukshio_log kk WHERE kk.digilocker_status = 'YES'
+        UNION ALL
+        SELECT ll.cust_id FROM mana0809.tbl_hyperverge_log ll WHERE ll.digilocker_status = 'YES'
+    ) dg ON t.cust_id = dg.cust_id
+    LEFT JOIN (
+        SELECT m.cust_id
+        FROM mana0809.identity_dtl m
+        WHERE m.identity_id NOT IN (16, 505)
+    ) oc ON t.cust_id = oc.cust_id
+    WHERE TRUNC(t.created_date) = TRUNC(SYSDATE)
+      AND t.branch_id <> 0;
+END;
+
+CREATE OR REPLACE PROCEDURE PROC_DAILY_VERIFICATION_MASTER(
+    p_flag IN VARCHAR2,
+    p_from_date IN VARCHAR2,
+    p_to_date IN VARCHAR2,
+    p_release_type IN VARCHAR2 DEFAULT NULL,
+    p_tester_tl IN VARCHAR2 DEFAULT NULL,
+    p_tester_name IN VARCHAR2 DEFAULT NULL,
+    p_json_input IN CLOB DEFAULT NULL,
+    p_updated_by IN VARCHAR2 DEFAULT NULL,
+    p_result OUT SYS_REFCURSOR
+) AS
+    v_from_dt DATE;
+    v_to_dt DATE;
+
+    TYPE t_item_rec IS RECORD(
+        crf_id VARCHAR2(50),
+        request_id VARCHAR2(50),
+        release_date VARCHAR2(20),
+        working_status VARCHAR2(100),
+        remarks VARCHAR2(4000),
+        attachment_name VARCHAR2(255),
+        attachment_b64 CLOB,
+        attachment_mime VARCHAR2(100)
+    );
+    TYPE t_item_tab IS TABLE OF t_item_rec;
+    v_items t_item_tab := t_item_tab();
+
+    v_release_dt DATE;
+    v_actual_release_dt DATE;  -- New: actual release date from srm_dailyrelease_updn
+    v_work_status NUMBER(1);
+    v_blob BLOB;
+    v_exists NUMBER;
+
+    v_crf_name VARCHAR2(500);
+    v_techlead VARCHAR2(200);
+    v_developer VARCHAR2(500);
+    v_tester_tl VARCHAR2(200);
+    v_tester VARCHAR2(500);
+
+    v_ErrID NUMBER;
+    v_ErrDesc VARCHAR2(4000);
+    v_ErrDtl CLOB;
+BEGIN
+    v_from_dt := TO_DATE(p_from_date, 'DD-MON-YYYY');
+    v_to_dt := TO_DATE(p_to_date, 'DD-MON-YYYY');
+
+    IF p_flag = 'FETCH' THEN
+        OPEN p_result FOR
+            WITH base_releases AS (
+                SELECT DISTINCT
+                    n.crf_id,
+                    NVL(TO_CHAR(n.request_id), 'NO REQUEST ID') AS request_id,
+                    sr.objective AS crf_name,
+                    TO_CHAR(n.updated_on, 'DD-MON-YYYY') AS release_date,
+                    e.emp_name AS techlead_name,
+                    LISTAGG(DISTINCT re.emp_name, ',') WITHIN GROUP (ORDER BY re.emp_name) AS developer_name,
+                    LISTAGG(DISTINCT ets.emp_name, ',') WITHIN GROUP (ORDER BY ets.emp_name) AS tester_name,
+                    est.emp_name AS tester_tl_name,
+                    DECODE(n.release_type, 1, 'Daily Release Report', 2, 'Exceptional & Expedite Report', 3, 'Expedite') AS release_type_text
+                FROM mana0809.srm_dailyrelease_updn n
+                LEFT JOIN mana0809.srm_software_request sr ON n.request_id = sr.request_id
+                LEFT JOIN mana0809.srm_request_assign rq ON n.request_id = rq.request_id
+                LEFT JOIN mana0809.employee_master re ON rq.assign_to = re.emp_code
+                LEFT JOIN mana0809.employee_master e ON n.techlead_id = e.emp_code
+                LEFT JOIN mana0809.srm_testing st ON st.request_id = n.request_id
+                LEFT JOIN mana0809.employee_master est ON st.test_lead = est.emp_code
+                LEFT JOIN mana0809.srm_test_assign ts ON ts.request_id = n.request_id
+                LEFT JOIN mana0809.employee_master ets ON ts.assign_to = ets.emp_code
+                WHERE TRUNC(n.updated_on) BETWEEN v_from_dt AND v_to_dt
+                  AND (p_release_type IS NULL OR
+                       (n.release_type = 1 AND p_release_type LIKE '%Daily%') OR
+                       (n.release_type IN (2,3) AND p_release_type LIKE '%Exception%'))
+                  AND (p_tester_tl IS NULL OR UPPER(est.emp_name) = UPPER(p_tester_tl))
+                  AND (p_tester_name IS NULL OR EXISTS (
+                        SELECT 1
+                        FROM mana0809.srm_test_assign ts2
+                        JOIN mana0809.employee_master ets2 ON ts2.assign_to = ets2.emp_code
+                        WHERE ts2.request_id = n.request_id
+                          AND UPPER(ets2.emp_name) = UPPER(p_tester_name)
+                  ))
+                GROUP BY n.crf_id, n.request_id, sr.objective, n.updated_on, e.emp_name, est.emp_name, n.release_type
+            ),
+            verification AS (
+                SELECT v.crf_id,
+                       TO_CHAR(v.release_dt, 'DD-MON-YYYY') AS release_date_str,
+                       v.working_status,
+                       v.remarks,
+                       v.attachment_filename AS attachment_name,
+                       v.updated_by AS verified_by,
+                       TO_CHAR(v.updated_on, 'DD-MON-YYYY HH24:MI') AS verified_on
+                FROM tbl_release_verify v
+                WHERE TRUNC(v.release_dt) BETWEEN v_from_dt AND v_to_dt
+            ),
+            history_agg AS (
+                SELECT rv.verify_id,
+                       '[' ||
+                       -- Current verification (always first/latest)
+                       '{"status_text":"' ||
+                       DECODE(rv.working_status,
+                              1, 'Working', 2, 'Not Working', 3, 'In Progress',
+                              4, 'Data need to capture', 5, 'User feedback pending',
+                              6, 'On Hold', 'Pending') || '",' ||
+                       '"remarks":"' || REPLACE(NVL(rv.remarks, ''), '"', '\"') || '",' ||
+                       '"attachment_name":"' || NVL(rv.attachment_filename, '') || '",' ||
+                       '"verified_by":"' || NVL(rv.updated_by, 'Unknown') || '",' ||
+                       '"verified_on":"' || TO_CHAR(rv.updated_on, 'DD-MON-YYYY HH24:MI') || '"}' ||
+                       NVL2(old_history.history_list, ',' || old_history.history_list, '') ||
+                       ']' AS history_json
+                FROM tbl_release_verify rv
+                LEFT JOIN (
+                    SELECT verify_id,
+                           LISTAGG(
+                             '{"status_text":"' ||
+                             DECODE(old_working_status,
+                                    1, 'Working', 2, 'Not Working', 3, 'In Progress',
+                                    4, 'Data need to capture', 5, 'User feedback pending',
+                                    6, 'On Hold', 'Unknown') || '",' ||
+                             '"remarks":"' || REPLACE(NVL(old_remarks, ''), '"', '\"') || '",' ||
+                             '"attachment_name":"' || NVL(old_attachment_filename, '') || '",' ||
+                             '"verified_by":"' || NVL(changed_by, '') || '",' ||
+                             '"verified_on":"' || TO_CHAR(changed_on, 'DD-MON-YYYY HH24:MI') || '"}',
+                             ',') WITHIN GROUP (ORDER BY changed_on DESC) AS history_list
+                    FROM tbl_release_verify_history
+                    GROUP BY verify_id
+                ) old_history ON rv.verify_id = old_history.verify_id
+            )
+            SELECT b.crf_id AS CRF_ID,
+                   b.request_id AS REQUEST_ID,
+                   b.crf_name AS CRF_NAME,
+                   b.release_date AS RELEASE_DATE,
+                   b.techlead_name AS TECHLEAD_NAME,
+                   b.developer_name AS DEVELOPER_NAME,
+                   b.tester_name AS TESTER_NAME,
+                   b.tester_tl_name AS TESTER_TL_NAME,
+                   b.release_type_text AS RELEASE_TYPE,
+                   v.working_status AS WORKING_STATUS,
+                   v.remarks AS REMARKS,
+                   v.attachment_name AS ATTACHMENT_NAME,
+                   v.verified_by AS VERIFIED_BY,
+                   v.verified_on AS VERIFIED_ON,
+                   NVL(h.history_json, '[]') AS HISTORY_JSON
+            FROM base_releases b
+            LEFT JOIN verification v
+              ON b.crf_id = v.crf_id
+             AND b.release_date = v.release_date_str
+            LEFT JOIN tbl_release_verify rv
+              ON rv.crf_id = b.crf_id
+             AND TO_CHAR(rv.release_dt, 'DD-MON-YYYY') = b.release_date
+            LEFT JOIN history_agg h
+              ON rv.verify_id = h.verify_id
+            ORDER BY b.release_date DESC, b.crf_id;
+
+    ELSIF p_flag = 'SAVE' THEN
+        SELECT jt.crf_id,
+               jt.request_id,
+               jt.release_date,
+               jt.working_status,
+               jt.remarks,
+               jt.attachment_name,
+               jt.attachment_b64,
+               jt.attachment_mime
+        BULK COLLECT INTO v_items
+        FROM JSON_TABLE(p_json_input, '$[*]'
+            COLUMNS(
+                crf_id VARCHAR2 PATH '$.crfId',
+                request_id VARCHAR2 PATH '$.requestId',
+                release_date VARCHAR2 PATH '$.releaseDate',
+                working_status VARCHAR2 PATH '$.workingStatus',
+                remarks VARCHAR2 PATH '$.remarks',
+                attachment_name VARCHAR2 PATH '$.attachmentName',
+                attachment_b64 CLOB PATH '$.attachmentBase64',
+                attachment_mime VARCHAR2 PATH '$.attachmentMime'
+            )) jt;
+
+        FOR i IN 1 .. v_items.COUNT LOOP
+            -- Get the ACTUAL release date from srm_dailyrelease_updn (critical fix!)
+            BEGIN
+                SELECT TRUNC(n.updated_on)
+                INTO v_actual_release_dt
+                FROM mana0809.srm_dailyrelease_updn n
+                WHERE n.crf_id = v_items(i).crf_id
+                  AND ROWNUM = 1;
+            EXCEPTION
+                WHEN NO_DATA_FOUND THEN
+                    v_actual_release_dt := TRUNC(SYSDATE);
+            END;
+
+            -- Use client-sent release_date only as fallback (for display consistency)
+            v_release_dt := v_actual_release_dt;
+            IF v_items(i).release_date IS NOT NULL AND TRIM(v_items(i).release_date) IS NOT NULL THEN
+                BEGIN
+                    v_release_dt := TO_DATE(TRIM(UPPER(v_items(i).release_date)), 'DD-MON-YYYY');
+                EXCEPTION
+                    WHEN OTHERS THEN NULL;
+                END;
+            END IF;
+
+            v_work_status := CASE UPPER(TRIM(v_items(i).working_status))
+                               WHEN 'WORKING' THEN 1
+                               WHEN 'NOT WORKING' THEN 2
+                               WHEN 'IN PROGRESS' THEN 3
+                               WHEN 'DATA NEED TO CAPTURE' THEN 4
+                               WHEN 'USER FEEDBACK PENDING' THEN 5
+                               WHEN 'ON HOLD' THEN 6
+                               ELSE 1
+                             END;
+
+            v_blob := NULL;
+            IF v_items(i).attachment_b64 IS NOT NULL THEN
+                BEGIN
+                    v_blob := BASE64_TO_BLOB(v_items(i).attachment_b64);
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+            END IF;
+
+            -- Defaults
+           /* v_crf_name := 'Unknown CRF';
+            v_techlead := 'Unknown';
+            v_developer := 'Unknown';
+            v_tester_tl := 'UNKNOWN TL';
+            v_tester := 'Unknown';*/
+
+            -- Fetch correct details using actual release date
+                 BEGIN
+        SELECT sr.objective,
+               NVL(e.emp_name, 'Unknown'),
+               NVL(LISTAGG(DISTINCT re.emp_name, ',') WITHIN GROUP (ORDER BY re.emp_name), 'Unknown'),
+               NVL(est.emp_name, 'Not Assigned'),
+               NVL(LISTAGG(DISTINCT ets.emp_name, ',') WITHIN GROUP (ORDER BY ets.emp_name), 'Not Assigned')
+          INTO v_crf_name, v_techlead, v_developer, v_tester_tl, v_tester
+          FROM mana0809.srm_dailyrelease_updn n
+          LEFT JOIN mana0809.srm_software_request sr ON n.request_id = sr.request_id
+          LEFT JOIN mana0809.srm_request_assign rq ON n.request_id = rq.request_id
+          LEFT JOIN mana0809.employee_master re ON rq.assign_to = re.emp_code
+          LEFT JOIN mana0809.employee_master e ON n.techlead_id = e.emp_code
+          LEFT JOIN mana0809.srm_testing st ON st.request_id = n.request_id
+          LEFT JOIN mana0809.employee_master est ON st.test_lead = est.emp_code
+          LEFT JOIN mana0809.srm_test_assign ts ON ts.request_id = n.request_id
+          LEFT JOIN mana0809.employee_master ets ON ts.assign_to = ets.emp_code
+         WHERE n.crf_id = v_items(i).crf_id
+           AND TRUNC(n.updated_on) = v_actual_release_dt
+         GROUP BY sr.objective, e.emp_name, est.emp_name;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          v_crf_name := 'Unknown CRF';
+          v_techlead := 'Unknown';
+          v_developer := 'Unknown';
+          v_tester_tl := 'Not Assigned';      -- Safe non-null value
+          v_tester := 'Not Assigned';         -- Safe non-null value
+        WHEN TOO_MANY_ROWS THEN
+          v_crf_name := 'Multiple Records';
+          v_techlead := 'Multiple';
+          v_developer := 'Multiple';
+          v_tester_tl := 'Not Assigned';
+          v_tester := 'Not Assigned';
+      END;
+
+            SELECT COUNT(*) INTO v_exists
+            FROM tbl_release_verify
+            WHERE crf_id = v_items(i).crf_id
+              AND TRUNC(release_dt) = v_actual_release_dt;
+
+            IF v_exists > 0 THEN
+                -- Archive old values
+                INSERT INTO tbl_release_verify_history (
+                    verify_id, old_remarks, old_working_status, old_attachment_filename,
+                    changed_on, changed_by, change_reason
+                )
+                SELECT verify_id, remarks, working_status, attachment_filename,
+                       SYSDATE, p_updated_by, 'Updated by Tester'
+                FROM tbl_release_verify
+                WHERE crf_id = v_items(i).crf_id
+                  AND TRUNC(release_dt) = v_actual_release_dt;
+
+                -- Update current
+                UPDATE tbl_release_verify
+                SET working_status = v_work_status,
+                    remarks = NVL(v_items(i).remarks, remarks),
+                    attachment = COALESCE(v_blob, attachment),
+                    attachment_filename = NVL(v_items(i).attachment_name, attachment_filename),
+                    attachment_mimetype = NVL(v_items(i).attachment_mime, attachment_mimetype),
+                    updated_on = SYSDATE,
+                    updated_by = p_updated_by,
+                    verify_status = 1
+                WHERE crf_id = v_items(i).crf_id
+                  AND TRUNC(release_dt) = v_actual_release_dt;
+            ELSE
+                -- First time insert
+                INSERT INTO tbl_release_verify (
+                    crf_id, request_id, crf_name, release_dt,
+                    techlead, developer, tester_tl, tester,
+                    working_status, remarks,
+                    attachment, attachment_filename, attachment_mimetype,
+                    updated_on, updated_by, verify_status
+                ) VALUES (
+                    v_items(i).crf_id,
+                    v_items(i).request_id,
+                    v_crf_name,
+                    v_actual_release_dt,
+                    v_techlead,
+                    v_developer,
+                    v_tester_tl,
+                    v_tester,
+                    v_work_status,
+                    NVL(v_items(i).remarks, 'No remarks provided'),
+                    v_blob,
+                    v_items(i).attachment_name,
+                    v_items(i).attachment_mime,
+                    SYSDATE,
+                    p_updated_by,
+                    1
+                );
+            END IF;
+        END LOOP;
+
+        OPEN p_result FOR SELECT 1 AS dummy FROM dual WHERE 1 = 0;
+
+    END IF;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        v_ErrID := SEQ_Itproject_ERRORID.NEXTVAL;
+        v_ErrDesc := SQLERRM;
+        v_ErrDtl := SQLERRM || CHR(10) ||
+                     DBMS_UTILITY.FORMAT_ERROR_BACKTRACE || CHR(10) ||
+                     DBMS_UTILITY.FORMAT_ERROR_STACK || CHR(10) ||
+                     DBMS_UTILITY.FORMAT_CALL_STACK;
+
+        INSERT INTO TBL_ITPROJECTS_ERROR_DTL (
+            error_id, proc_name, error_description, error_details, tra_dt
+        ) VALUES (
+            v_ErrID, 'PROC_DAILY_VERIFICATION_MASTER', v_ErrDesc, v_ErrDtl, SYSDATE
+        );
+        COMMIT;
+        RAISE_APPLICATION_ERROR(-20001, 'Error in PROC_DAILY_VERIFICATION_MASTER: ' || v_ErrDesc);
+END;
+CREATE OR REPLACE PROCEDURE proc_KYC_DEVIATION_REPORT(
+    p_from_date IN DATE,
+    p_to_date   IN DATE,
+    p_cursor    OUT SYS_REFCURSOR
+) AS
+BEGIN
+    OPEN p_cursor FOR
+    WITH date_range AS (
+        SELECT TRUNC(p_from_date) AS start_dt,
+               TRUNC(p_to_date)   AS end_dt
+        FROM dual
+    )
+    SELECT
+        ROWNUM AS SNO,
+        DESCRIPTION AS KYC_DEVIATION,
+        DEVIATION_COUNT AS COUNT_COL,
+        STATUS_NOTE AS STATUS
+    FROM (
+        -- 1. New Customer Creation
+        SELECT 1 AS ORD, 'New Customer Creation' AS DESCRIPTION,
+               (SELECT COUNT(*)
+                FROM mana0809.customer t
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range)
+                                                AND (SELECT end_dt FROM date_range)) AS DEVIATION_COUNT,
+               '' AS STATUS_NOTE
+        FROM dual
+
+       UNION ALL
+        -- 2. Customer onboard Without Photo
+        SELECT 2, 'Customer onboard Without Photo',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                LEFT JOIN mana0809.customer_photo m ON t.cust_id = m.cust_id AND m.pledge_photo IS NOT NULL
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.cust_id IS NULL),
+               ''
+        FROM dual
+
+       /* UNION ALL
+        -- 3. Pan not collected for pledges > 5 Lakhs
+        SELECT 3, 'Pan is not collected for pledges > 5 Lakhs',
+               (SELECT COUNT(*)
+                FROM mana0809.pledge_master t
+                LEFT JOIN dms.deposit_pan_detail m ON t.cust_id = m.cust_id
+                WHERE TRUNC(t.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND t.pledge_val > 500000
+                  AND m.pan IS NULL),
+               ''
+        FROM dual*/
+
+       /* UNION ALL
+        -- 4. Invalid Aadhaar Number
+        SELECT 4, 'Invalid Aadhaar Number',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id IN (16, 505, 555)
+                  AND LENGTH(TRIM(m.id_number)) != 12),
+               ''
+        FROM dual*/
+
+      /* UNION ALL
+        -- 5. Invalid Passport Number
+        SELECT 5, 'Invalid Passport Number',
+               (SELECT COUNT(*)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id = 1
+                  AND LENGTH(TRIM(m.id_number)) < 8),
+               ''
+        FROM dual*/
+
+       /* UNION ALL
+        -- 6. KYC ID less than 8 digits
+        SELECT 6, 'Kyc id number less than 8 Digit',
+               (SELECT COUNT(DISTINCT m.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND LENGTH(TRIM(m.id_number)) < 8),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 7. Aadhaar not masked
+        SELECT 7, 'Aadhar card not masked',
+               (SELECT COUNT(DISTINCT j.cust_id)
+                FROM (
+                    SELECT cust_id
+                    FROM mana0809.identity_dtl
+                    WHERE identity_id IN (16,505,555)
+                      AND REGEXP_LIKE(id_number, '^[0-9]{12}$')
+                      AND id_number NOT LIKE 'XXXXXX%'
+                ) j
+                JOIN mana0809.customer_detail m ON m.cust_id = j.cust_id
+                WHERE TRUNC(m.reg_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 8. KYC Document Not Uploaded
+        SELECT 8, 'Kyc Document Not Upload',
+               (SELECT COUNT(DISTINCT s.cust_id)
+                FROM mana0809.pledge_master s
+                LEFT JOIN mana0809.customer_photo k ON s.cust_id = k.cust_id AND k.kyc_photo IS NOT NULL
+                WHERE TRUNC(s.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND k.cust_id IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 9. KYC Number not captured
+        SELECT 9, 'Kyc number not capture in system',
+               (SELECT COUNT(DISTINCT s.cust_id)
+                FROM mana0809.pledge_master s
+                JOIN mana0809.customer t ON t.cust_id = s.cust_id
+                LEFT JOIN mana0809.identity_dtl m ON m.cust_id = s.cust_id AND m.id_number IS NOT NULL
+                WHERE TRUNC(s.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.cust_id IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 10. Transaction without photo
+        SELECT 10, 'Transaction with out photo',
+               (SELECT COUNT(DISTINCT s.cust_id)
+                FROM mana0809.pledge_master s
+                LEFT JOIN mana0809.customer_photo m ON m.cust_id = s.cust_id AND m.pledge_photo IS NOT NULL
+                WHERE TRUNC(s.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.cust_id IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 11. PAN 4th character not 'P'
+        SELECT 11, 'Pan updated Other than Alphabet position P',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN dms.deposit_pan_detail k ON t.cust_id = k.cust_id
+                JOIN mana0809.pledge_master s ON k.cust_id = s.cust_id
+                WHERE SUBSTR(UPPER(k.pan), 4, 1) != 'P'
+                  AND LENGTH(k.pan) = 10
+                  AND TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 12. Transacted with expired passport/DL
+        SELECT 12, 'Transacted with expiry passport and DL',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.customer_detail k ON m.cust_id = k.cust_id
+                JOIN mana0809.pledge_master p ON k.cust_id = p.cust_id
+                WHERE TRUNC(p.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id IN (1, 2, 502)
+                  AND m.exp_dt IS NOT NULL
+                  AND m.exp_dt + 30 < p.tra_dt),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 13. KYC doc upload but not masked
+        SELECT 13, 'kyc doc upload mask-Transaction without mask',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.pledge_master s ON m.cust_id = s.cust_id
+                JOIN mana0809.customer_photo k ON s.cust_id = k.cust_id
+                WHERE TRUNC(s.tradate) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id IN (16,505,555)
+                  AND k.pledge_photo IS NOT NULL
+                  AND m.id_number IS NOT NULL
+                  AND NOT REGEXP_LIKE(m.id_number, '^[A-Z]{8}[0-9]{4}$')),  -- Example masking pattern XXXX XXXX XXXX
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 14. Masked onboard (onboarded with masked Aadhaar)
+        SELECT 14, 'masked onboard',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.customer_detail k ON m.cust_id = k.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id IN (16,505,555)
+                  AND NOT REGEXP_LIKE(m.id_number, '^[A-Z]{8}[0-9]{4}$')),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 15. NREGA Validation (length not 17-21)
+        SELECT 15, 'NREGA Validation 17 to 21',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.customer_photo k ON m.cust_id = k.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id = 17
+                  AND LENGTH(m.id_number) NOT BETWEEN 17 AND 21),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 16. NPR Validation (length not 12-16)
+        SELECT 16, 'NPR Validation 12 to 16',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.customer_photo k ON m.cust_id = k.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id = 18
+                  AND LENGTH(m.id_number) NOT BETWEEN 12 AND 16),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 17. Transactioned with PAN 4th letter not P
+        SELECT 17, 'Transactioned Pancard 4th Letter P',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN dms.deposit_pan_detail k ON t.cust_id = k.cust_id
+                JOIN mana0809.pledge_master s ON k.cust_id = s.cust_id
+                WHERE SUBSTR(UPPER(k.pan),4,1) != 'P'
+                  AND LENGTH(k.pan)=10
+                  AND TRUNC(s.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 18. Age Limit Below 18 and Above 100 years
+        SELECT 18, 'Age Limit Below 18 and Above 100 years',
+               (SELECT COUNT(DISTINCT tt.cust_id)
+                FROM mana0809.customer_detail tt
+                JOIN mana0809.tbl_pledge_yesterday_live a ON tt.cust_id = a.cust_id
+                WHERE tt.date_of_birth >= ADD_MONTHS(TRUNC(SYSDATE), -18*12)   -- Below 18
+                   OR tt.date_of_birth <= ADD_MONTHS(TRUNC(SYSDATE), -100*12)), -- Above 100
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 19. Above 100 years only
+        SELECT 19, 'Above 100 years',
+               (SELECT COUNT(DISTINCT tt.cust_id)
+                FROM mana0809.customer_detail tt
+                JOIN mana0809.tbl_pledge_yesterday_live a ON tt.cust_id = a.cust_id
+                WHERE tt.date_of_birth <= ADD_MONTHS(TRUNC(SYSDATE), -100*12)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 20. Duplicate Id Number
+        SELECT 20, 'Duplicate Id Number',
+               (SELECT COUNT(*) FROM (
+                   SELECT 1
+                   FROM mana0809.identity_dtl t
+                   JOIN mana0809.customer c ON c.cust_id = t.cust_id
+                   WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                   GROUP BY t.id_number, t.identity_id
+                   HAVING COUNT(*) > 1
+               )),
+               'Duplicate id number'
+        FROM dual
+
+        UNION ALL
+        -- 21. Duplicate Account + IFSC
+        SELECT 21, 'Acc no And Ifsc Code',
+               (SELECT COUNT(*) FROM (
+                   SELECT 1
+                   FROM mana0809.neft_customer t
+                   JOIN mana0809.customer c ON c.cust_id = t.cust_id
+                   WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                     AND c.isactive = 1
+                   GROUP BY t.ifsc_code, t.beneficiary_account
+                   HAVING COUNT(*) > 1
+               )),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 22. Simplified KYC
+        SELECT 22, 'Simplified kyc customer creation',
+               (SELECT COUNT(DISTINCT c.cust_id)
+                FROM mana0809.customer c
+                JOIN mana0809.identity_dtl i ON c.cust_id = i.cust_id
+                WHERE i.identity_id NOT IN (1,2,3,16,17,18,501,502,503,505,555)
+                  AND TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 23. Customer without PAN/Form60
+        SELECT 23, 'customer ID created without PAN/FORM60',
+               (SELECT COUNT(*)
+                FROM mana0809.customer c
+                WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND c.cust_id NOT IN (SELECT f.cust_id FROM dms.tbl_customer_form60 f)
+                  AND c.cust_id NOT IN (SELECT p.cust_id FROM dms.deposit_pan_detail p)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 24. Transaction >50k without PAN/Form60
+        SELECT 24, 'Transaction above 50000 without form60 and PAN card',
+               (SELECT COUNT(*)
+                FROM mana0809.pledge_master p
+                WHERE p.cust_id IN (
+                    SELECT c.cust_id
+                    FROM mana0809.customer c
+                    WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                      AND c.cust_id NOT IN (SELECT f.cust_id FROM dms.tbl_customer_form60 f)
+                      AND c.cust_id NOT IN (SELECT pp.cust_id FROM dms.deposit_pan_detail pp)
+                )
+                AND p.pledge_val > 50000),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 25. Customer creation without KYC document
+        SELECT 25, 'CUSTOMER ID CREATION WITHOUT KYC DOCUMENT',
+               (SELECT COUNT(*)
+                FROM mana0809.customer c
+                JOIN mana0809.customer_photo p ON p.cust_id = c.cust_id
+                WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND p.kyc_photo IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 26. Onboarded age below 18
+        SELECT 26, 'Onboarded age below 18',
+               (SELECT COUNT(*)
+                FROM mana0809.customer_detail k
+                JOIN mana0809.customer t ON k.cust_id = t.cust_id
+                WHERE (TRUNC(k.reg_date) - TRUNC(k.date_of_birth)) / 365.25 < 18
+                  AND TRUNC(k.reg_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual*/
+    )
+    ORDER BY ORD;
+END;
+
+------------
+
+In my daily verication page , after confirm , total crf is displaying 
+what i need when who is logging that employee crf need to view in the crf list
+some time two tester under one crf may come no issue in that 
+but after confirmed total crf list from another employee is displaying
+and i attached my image in module but in database table it is not able to view 
+in my front end also attached images can't able to view 
+
+// File: Controllers/DailyVerificationController.cs
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Oracle.ManagedDataAccess.Client;
+using System.Data;
+using Newtonsoft.Json;
+using System.Security.Claims;
+using Oracle.ManagedDataAccess.Types;
+
+namespace WebApplication10.Controllers
+{
+    [Authorize]
+    [Route("api/[controller]")]
+    [ApiController]
+    public class DailyVerificationController : ControllerBase
+    {
+        private readonly IConfiguration _config;
+        private readonly string _connStr;
+
+        public DailyVerificationController(IConfiguration config)
+        {
+            _config = config;
+            _connStr = _config.GetConnectionString("OracleConnection");
+        }
+
+        // FETCH: Get all CRFs with verification status
+        [HttpPost]
+        public async Task<IActionResult> Post([FromBody] FilterModel filters)
+        {
+            if (filters == null || string.IsNullOrWhiteSpace(filters.fromDate) || string.IsNullOrWhiteSpace(filters.toDate))
+                return BadRequest("Dates required");
+
+            var list = new List<object>();
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            using var cmd = new OracleCommand("PROC_DAILY_REPORTS_MASTER", conn)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            cmd.Parameters.Add("p_flag", OracleDbType.Varchar2).Value = "DAILY_VERIFICATION";
+            cmd.Parameters.Add("p_sub_flag", OracleDbType.Varchar2).Value = "FETCH";
+            cmd.Parameters.Add("p_from_date", OracleDbType.Varchar2).Value = filters.fromDate;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Varchar2).Value = filters.toDate;
+            cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = filters.releaseType ?? (object)DBNull.Value;
+            cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = filters.testerTL ?? (object)DBNull.Value;
+            cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = filters.testerName ?? (object)DBNull.Value;
+            cmd.Parameters.Add("p_json_input", OracleDbType.Clob).Value = DBNull.Value;
+            cmd.Parameters.Add("p_updated_by", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+            using var rdr = await cmd.ExecuteReaderAsync();
+            while (await rdr.ReadAsync())
+            {
+                list.Add(new
+                {
+                    CRF_ID = rdr["CRF_ID"]?.ToString() ?? "N/A",
+                    REQUEST_ID = rdr["REQUEST_ID"]?.ToString() ?? "",
+                    CRF_NAME = rdr["CRF_NAME"]?.ToString() ?? "Unknown CRF",
+                    RELEASE_DATE = rdr["RELEASE_DATE"]?.ToString() ?? "",
+                    TECHLEAD_NAME = rdr["TECHLEAD_NAME"]?.ToString() ?? "",
+                    DEVELOPER_NAME = rdr["DEVELOPER_NAME"]?.ToString() ?? "",
+                    TESTER_NAME = rdr["TESTER_NAME"]?.ToString() ?? "",
+                    TESTER_TL_NAME = rdr["TESTER_TL_NAME"]?.ToString() ?? "",
+                    RELEASE_TYPE = rdr["RELEASE_TYPE"]?.ToString() ?? "",
+                    WORKING_STATUS = rdr["WORKING_STATUS"]?.ToString() ?? "",
+                    REMARKS = rdr["REMARKS"]?.ToString() ?? "",
+                    ATTACHMENT_NAME = rdr["ATTACHMENT_NAME"]?.ToString() ?? "",
+                    VERIFIED_BY = rdr["VERIFIED_BY"]?.ToString() ?? "",
+                    VERIFIED_ON = rdr["VERIFIED_ON"]?.ToString() ?? "",
+                    HISTORY_JSON = rdr["HISTORY_JSON"]?.ToString() ?? "[]"
+                });
+            }
+
+            return Ok(list);
+        }
+
+        // SAVE: Save verification + insert into history table
+        [HttpPost("Save")]
+        public async Task<IActionResult> Save([FromBody] List<SaveModel> items)
+        {
+            if (items == null || items.Count == 0)
+                return BadRequest("No data to save");
+
+            var userName = User.FindFirst(ClaimTypes.GivenName)?.Value ??
+                           User.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown User";
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            // Only call the master procedure — it handles BOTH insert/update AND history archiving
+            using var cmd = new OracleCommand("PROC_DAILY_VERIFICATION_MASTER", conn)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            cmd.Parameters.Add("p_flag", OracleDbType.Varchar2).Value = "SAVE";
+            cmd.Parameters.Add("p_from_date", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_to_date", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_release_type", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_tl", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_tester_name", OracleDbType.Varchar2).Value = DBNull.Value;
+            cmd.Parameters.Add("p_json_input", OracleDbType.Clob).Value = JsonConvert.SerializeObject(items);
+            cmd.Parameters.Add("p_updated_by", OracleDbType.Varchar2).Value = userName;
+            cmd.Parameters.Add("p_result", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
+
+            await cmd.ExecuteNonQueryAsync();
+
+            return Ok(new { message = "Saved successfully" });
+        }
+
+        // GET FILTERS
+        [HttpGet("filters")]
+        public async Task<IActionResult> GetFilters()
+        {
+            var tlList = new List<object>();
+            var testerList = new List<object>();
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            using (var cmd = new OracleCommand(@"
+                SELECT DISTINCT est.emp_name AS name
+                FROM mana0809.srm_dailyrelease_updn n
+                JOIN mana0809.srm_testing st ON st.request_id = n.request_id
+                JOIN mana0809.employee_master est ON est.emp_code = st.test_lead
+                ORDER BY est.emp_name", conn))
+            {
+                using var rdr = await cmd.ExecuteReaderAsync();
+                while (await rdr.ReadAsync())
+                {
+                    var name = rdr["name"]?.ToString();
+                    if (!string.IsNullOrEmpty(name))
+                        tlList.Add(new { text = name, value = name });
+                }
+            }
+
+            using (var cmd = new OracleCommand(@"
+                SELECT DISTINCT TRIM(REGEXP_SUBSTR(tester, '[^,]+', 1, level)) AS name
+                FROM mana0809.srm_dailyrelease_updn
+                WHERE tester IS NOT NULL
+                CONNECT BY REGEXP_SUBSTR(tester, '[^,]+', 1, level) IS NOT NULL
+                  AND PRIOR dbms_random.value IS NOT NULL
+                  AND PRIOR sys_guid() IS NOT NULL
+                ORDER BY name", conn))
+            {
+                using var rdr = await cmd.ExecuteReaderAsync();
+                while (await rdr.ReadAsync())
+                {
+                    var name = rdr["name"]?.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(name))
+                        testerList.Add(new { text = name, value = name });
+                }
+            }
+
+            return Ok(new
+            {
+                testerTLs = tlList,
+                testerNames = testerList
+            });
+        }
+        [HttpGet("testers/{testerTL}")]
+        public async Task<IActionResult> GetTestersByTL(string testerTL)
+        {
+            if (string.IsNullOrWhiteSpace(testerTL))
+                return Ok(new List<object>());
+
+            var tlToSubTeam = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "JIJIN E H", 1 },
+        { "MURUGESAN P", 2 },
+        { "NIKHIL SEKHAR", 3 },
+        { "SMINA BENNY", 4 },
+        { "VISAGH S", 5 },
+        { "JOBY JOSE", 6 }
+    };
+
+            if (!tlToSubTeam.TryGetValue(testerTL.Trim(), out int subTeam))
+                return Ok(new List<object>());
+
+            var testers = new List<object>();
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            var cmd = new OracleCommand(@"
+        SELECT DISTINCT v.emp_name
+        FROM mana0809.srm_it_team_members t
+        JOIN mana0809.employee_master v ON t.member_id = v.emp_code
+        WHERE t.team_id = 6
+          AND t.sub_team = :subTeam
+          AND v.status_id = 1
+        ORDER BY v.emp_name", conn);
+
+            cmd.Parameters.Add("subTeam", OracleDbType.Int32).Value = subTeam;
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var name = reader["emp_name"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(name))
+                    testers.Add(new { text = name, value = name });
+            }
+
+            return Ok(testers);
+        }
+        [HttpGet("Attachment/{crfId}/{releaseDate}")]
+        public async Task<IActionResult> GetAttachment(string crfId, string releaseDate)
+        {
+            if (string.IsNullOrWhiteSpace(crfId) || string.IsNullOrWhiteSpace(releaseDate))
+                return BadRequest("Invalid parameters");
+
+            // Parse releaseDate from "16-DEC-2025" format
+            if (!DateTime.TryParseExact(releaseDate, "dd-MMM-yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime relDate))
+                return BadRequest("Invalid date format");
+
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            using var cmd = new OracleCommand(@"
+        SELECT attachment, attachment_filename, attachment_mimetype
+        FROM tbl_release_verify
+        WHERE crf_id = :crfId
+          AND TRUNC(release_dt) = :releaseDt", conn);
+
+            cmd.Parameters.Add("crfId", OracleDbType.Varchar2).Value = crfId;
+            cmd.Parameters.Add("releaseDt", OracleDbType.Date).Value = relDate.Date;
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                var blob = reader["attachment"] as OracleBlob;
+                var fileName = reader["attachment_filename"]?.ToString() ?? "attachment";
+                var mime = reader["attachment_mimetype"]?.ToString() ?? "application/octet-stream";
+
+                if (blob == null || blob.IsNull || blob.Length == 0)
+                    return NotFound("No attachment found");
+
+                var stream = new MemoryStream();
+                await blob.CopyToAsync(stream);
+                stream.Position = 0;
+
+                // This enables download + allows inline view for browser-supported types (PDF, images, etc.)
+                return File(stream, mime, fileName);
+            }
+
+            return NotFound("Attachment not found");
+        }
+    }
+
+
+    public class FilterModel
+    {
+        public required string fromDate { get; set; }
+        public required string toDate { get; set; }
+        public string? releaseType { get; set; }
+        public string? testerTL { get; set; }
+        public string? testerName { get; set; }
+    }
+
+    public class SaveModel
+    {
+        public required string crfId { get; set; }
+        public required string requestId { get; set; }  // <-- THIS WAS MISSING!
+        public required string workingStatus { get; set; }
+        public string remarks { get; set; } = "";
+        public string? attachmentName { get; set; }
+        public string? attachmentBase64 { get; set; }
+        public string? attachmentMime { get; set; }
+    }
+}
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Oracle.ManagedDataAccess.Client;
+using System.Data;
+
+namespace WebApplication10.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]
+    public class QAVerificationController : ControllerBase
+    {
+        private readonly IConfiguration _config;
+        private readonly string _connStr;
+
+        public QAVerificationController(IConfiguration config)
+        {
+            _config = config;
+            _connStr = config.GetConnectionString("OracleConnection");
+        }
+
+        [HttpPost("save")]
+        public async Task<IActionResult> SaveVerification([FromBody] VerificationRequest request)
+        {
+            var empCode = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+            var empName = User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? "Unknown";
+
+            if (string.IsNullOrEmpty(empCode))
+                return Unauthorized("User not authenticated");
+
+            if (string.IsNullOrEmpty(request.CrfId) || string.IsNullOrEmpty(request.WorkingStatus))
+                return BadRequest("CRF ID and Working Status are required");
+
+            // File size check (≤10 MB)
+            if (!string.IsNullOrEmpty(request.AttachmentBase64))
+            {
+                try
+                {
+                    var bytes = Convert.FromBase64String(request.AttachmentBase64);
+                    if (bytes.Length > 10 * 1024 * 1024)
+                        return BadRequest("Attachment size must be ≤ 10 MB");
+                }
+                catch
+                {
+                    return BadRequest("Invalid attachment data");
+                }
+            }
+
+            using (var conn = new OracleConnection(_connStr))
+            {
+                await conn.OpenAsync();
+                using (var cmd = new OracleCommand("proc_qa_verification", conn))
+                {
+                    cmd.CommandType = CommandType.StoredProcedure;
+
+                    // Input parameters
+                    cmd.Parameters.Add("p_crf_id", OracleDbType.Varchar2).Value = request.CrfId;
+                    cmd.Parameters.Add("p_working_status", OracleDbType.Varchar2).Value = request.WorkingStatus;
+                    cmd.Parameters.Add("p_remarks", OracleDbType.Varchar2).Value = 
+                        string.IsNullOrEmpty(request.Remarks) ? (object)DBNull.Value : request.Remarks.Length > 4000 
+                            ? request.Remarks.Substring(0, 4000) : request.Remarks;
+
+                    cmd.Parameters.Add("p_attachment_name", OracleDbType.Varchar2).Value = 
+                        string.IsNullOrEmpty(request.AttachmentName) ? (object)DBNull.Value : request.AttachmentName;
+
+                    if (!string.IsNullOrEmpty(request.AttachmentBase64))
+                    {
+                        var blobData = Convert.FromBase64String(request.AttachmentBase64);
+                        cmd.Parameters.Add("p_attachment_data", OracleDbType.Blob).Value = blobData;
+                    }
+                    else
+                    {
+                        cmd.Parameters.Add("p_attachment_data", OracleDbType.Blob).Value = DBNull.Value;
+                    }
+
+                    cmd.Parameters.Add("p_attachment_mime", OracleDbType.Varchar2).Value = 
+                        string.IsNullOrEmpty(request.AttachmentMime) ? (object)DBNull.Value : request.AttachmentMime;
+
+                    cmd.Parameters.Add("p_verified_by", OracleDbType.Varchar2).Value = empCode;
+                    cmd.Parameters.Add("p_verified_by_name", OracleDbType.Varchar2).Value = empName;
+
+                    // Output parameters
+                    var resultParam = cmd.Parameters.Add("p_result", OracleDbType.Varchar2);
+                    resultParam.Direction = ParameterDirection.Output;
+                    resultParam.Size = 4000;
+
+                    var verIdParam = cmd.Parameters.Add("p_verification_id", OracleDbType.Decimal);
+                    verIdParam.Direction = ParameterDirection.Output;
+
+                    try
+                    {
+                        await cmd.ExecuteNonQueryAsync();
+
+                        string result = resultParam.Value?.ToString() ?? "UNKNOWN";
+                        string verId = verIdParam.Value?.ToString() ?? "0";
+
+                        if (result == "SUCCESS")
+                        {
+                            return Ok(new
+                            {
+                                success = true,
+                                message = "Verification saved successfully",
+                                verification_id = verId
+                            });
+                        }
+                        else
+                        {
+                            return BadRequest(new { success = false, message = result });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        return StatusCode(500, new { success = false, message = "Database error: " + ex.Message });
+                    }
+                }
+            }
+        }
+    }
+
+    public class VerificationRequest
+    {
+        public string CrfId { get; set; } = string.Empty;
+        public string WorkingStatus { get; set; } = string.Empty;
+        public string? Remarks { get; set; }
+        public string? AttachmentName { get; set; }
+        public string? AttachmentBase64 { get; set; }
+        public string? AttachmentMime { get; set; }
+    }
+} why two controller make it single controller
+
+

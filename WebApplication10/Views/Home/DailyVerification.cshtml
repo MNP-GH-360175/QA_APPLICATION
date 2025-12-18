@@ -128,7 +128,6 @@
         let filteredData = [];
         const pageSize = 10;
         let currentPage = 1;
-
         const normalizeKeys = obj => new Proxy(obj, {
             get(target, prop) {
                 if (prop in target) return target[prop];
@@ -137,12 +136,10 @@
                 return found ? target[found] : undefined;
             }
         });
-
         async function loadFilterDropdowns() {
             try {
                 const token = localStorage.getItem('jwtToken');
                 if (!token) return;
-
                 // Get current logged-in user name from JWT
                 let currentUserName = "Unknown";
                 try {
@@ -151,35 +148,25 @@
                 } catch (e) {
                     console.error("Failed to parse JWT", e);
                 }
-
-                const res = await fetch('/api/DailyVerification/filters', {
+                const res = await fetch('/api/Verification/filters', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 if (!res.ok) throw new Error("Failed to load filters");
                 const data = await res.json();
-
                 const tlSelect = document.getElementById("testerTL");
                 const testerSelect = document.getElementById("testerName");
-
-                // Clear and add "All TLs" (optional - you can remove if not needed)
                 tlSelect.innerHTML = '<option value="">My TL</option>';
                 testerSelect.innerHTML = '<option value="">My Name</option>';
-
                 let userFound = false;
-
-                // Find user's TL and name
                 for (const tl of data.testerTLs || []) {
-                    const testersRes = await fetch(`/api/DailyVerification/testers/${encodeURIComponent(tl.value)}`, {
+                    const testersRes = await fetch(`/api/Verification/testers/${encodeURIComponent(tl.value)}`, {
                         headers: { 'Authorization': 'Bearer ' + token }
                     });
                     if (testersRes.ok) {
                         const testers = await testersRes.json();
                         if (testers.some(t => t.value.toUpperCase() === currentUserName.toUpperCase())) {
-                            // Found user's TL!
                             tlSelect.innerHTML = `<option value="${tl.value}">${tl.text}</option>`;
-                            tlSelect.disabled = true; // Optional: lock it
-
-                            // Populate only this TL's testers
+                            tlSelect.disabled = true;
                             testerSelect.innerHTML = '';
                             testers.forEach(t => {
                                 const opt = new Option(t.text, t.value);
@@ -189,15 +176,12 @@
                                 }
                                 testerSelect.add(opt);
                             });
-                            testerSelect.disabled = true; // Optional: lock name too
+                            testerSelect.disabled = true;
                             break;
                         }
                     }
                 }
-
-                // Fallback if not found in team structure
                 if (!userFound) {
-                    // Show all TLs and try to select user
                     tlSelect.innerHTML = '<option value="">All TLs</option>';
                     data.testerTLs?.forEach(x => tlSelect.add(new Option(x.text, x.value)));
                     testerSelect.innerHTML = '<option value="">All Testers</option>';
@@ -207,20 +191,17 @@
                         testerSelect.add(opt);
                     });
                 }
-
             } catch (err) {
                 console.error("Error loading filters:", err);
                 showToast("Failed to load your team info", "danger");
             }
         }
-
         function formatDateForOracle(dateStr) {
             if (!dateStr) return "";
             const d = new Date(dateStr);
             const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
             return `${String(d.getDate()).padStart(2, '0')}-${months[d.getMonth()]}-${d.getFullYear()}`;
         }
-
         document.getElementById("filterForm").addEventListener("submit", async e => {
             e.preventDefault();
             let valid = true;
@@ -239,18 +220,16 @@
                 const payload = JSON.parse(atob(token.split('.')[1]));
                 currentUserName = payload.given_name || payload.name || payload.unique_name || "Unknown";
             } catch { }
-
             const payload = {
                 fromDate: formatDateForOracle(document.getElementById("fromDate").value),
                 toDate: formatDateForOracle(document.getElementById("toDate").value),
                 releaseType: document.getElementById("releaseType").value || null,
-                testerTL:  null,
+                testerTL: null,
                 testerName: currentUserName
             };
-
             const token = localStorage.getItem('jwtToken');
             try {
-                const res = await fetch('/api/DailyVerification', {
+                const res = await fetch('/api/Verification', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -297,7 +276,6 @@
                 alert("Error: " + err.message);
             }
         });
-
         function updateTableAndPagination() {
             document.getElementById("totalRecords").textContent = filteredData.length;
             const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
@@ -307,7 +285,6 @@
             document.getElementById("nextPage").parentElement.classList.toggle("disabled", currentPage === totalPages);
             renderTable();
         }
-
         function renderTable() {
             const tbody = document.getElementById("verificationBody");
             tbody.innerHTML = "";
@@ -327,46 +304,52 @@
                 const canConfirm = item.workingStatus && (item.remarks || "").trim().length > 0;
                 const row = document.createElement("tr");
                 row.innerHTML = `
-                                <td class="ps-4"><a href="#" class="text-decoration-none fw-bold text-primary crf-link" data-idx="${globalIdx}">${item.crfId}</a></td>
-                                <td><span class="badge bg-secondary fs-7">${item.requestId || 'N/A'}</span></td>
-                                <td><span class="badge ${badgeCls} fs-7">${badgeText}</span></td>
-                                <td class="text-wrap" title="${item.subject}">${item.subject.length > 50 ? item.subject.substring(0, 47) + '...' : item.subject}</td>
-                                <td>${item.releaseDate}</td>
-                                <td><strong>${item.techlead}</strong></td>
-                                <td>${item.developer}</td>
-                                <td><strong>${item.tester}</strong></td>
-                                <td class="text-center align-middle">
-                                    ${item.isConfirmed
+                                        <td class="ps-4"><a href="#" class="text-decoration-none fw-bold text-primary crf-link" data-idx="${globalIdx}">${item.crfId}</a></td>
+                                        <td><span class="badge bg-secondary fs-7">${item.requestId || 'N/A'}</span></td>
+                                        <td><span class="badge ${badgeCls} fs-7">${badgeText}</span></td>
+                                        <td class="text-wrap" title="${item.subject}">${item.subject.length > 50 ? item.subject.substring(0, 47) + '...' : item.subject}</td>
+                                        <td>${item.releaseDate}</td>
+                                        <td><strong>${item.techlead}</strong></td>
+                                        <td>${item.developer}</td>
+                                        <td><strong>${item.tester}</strong></td>
+                                        <td class="text-center align-middle">
+                                            ${item.isConfirmed
                         ? `<span class="badge bg-success px-3 py-2 fs-7">${item.workingStatus}</span>
-                                           <button class="btn btn-sm btn-outline-warning ms-2 edit-btn" data-idx="${globalIdx}">Edit</button>`
+                                                   <button class="btn btn-sm btn-outline-warning ms-2 edit-btn" data-idx="${globalIdx}">Edit</button>`
                         : `<select class="form-select form-select-sm status-select" data-idx="${globalIdx}">
-                                              <option value="">-- Select --</option>
-                                              ${STATUS_OPTIONS.map(opt => `<option value="${opt}" ${item.workingStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
-                                           </select>`
+                                                      <option value="">-- Select --</option>
+                                                      ${STATUS_OPTIONS.map(opt => `<option value="${opt}" ${item.workingStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                                                   </select>`
                     }
-                                </td>
-                                <td class="align-middle">
-                                    <textarea class="form-control form-control-sm remarks-text w-100" rows="2" data-idx="${globalIdx}" ${item.isConfirmed ? 'readonly' : ''}>${item.remarks || ''}</textarea>
-                                    <small class="text-muted word-count">${(item.remarks || '').trim().split(/\s+/).filter(Boolean).length} words</small>
-                                </td>
-                                <td class="align-middle">
-                                    ${!item.isConfirmed
+                                        </td>
+                                        <td class="align-middle">
+                                            <textarea class="form-control form-control-sm remarks-text w-100" rows="2" data-idx="${globalIdx}" ${item.isConfirmed ? 'readonly' : ''}>${item.remarks || ''}</textarea>
+                                            <small class="text-muted word-count">${(item.remarks || '').trim().split(/\s+/).filter(Boolean).length} words</small>
+                                        </td>
+                                        <td class="align-middle text-center">
+                                            ${!item.isConfirmed
                         ? `<input type="file" class="form-control form-control-sm file-input" data-idx="${globalIdx}" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">`
-                        : (item.attachmentName ? `<a href="#" class="text-primary download-link" data-idx="${globalIdx}"> ${item.attachmentName}</a>` : '-')
+                        : (item.attachmentName
+                            ? `<a href="/api/Verification/Attachment/${encodeURIComponent(item.crfId)}/${encodeURIComponent(item.releaseDate)}"
+                                         target="_blank"
+                                         class="btn btn-sm btn-outline-primary">
+                                         <i class="fas fa-paperclip me-1"></i>${item.attachmentName
+                                         }
+                                       </a>`
+                            : '-')
                     }
-                                </td>
-                                <td class="text-center align-middle">
-                                    <button class="btn ${item.isConfirmed ? 'btn-success' : (canConfirm ? 'btn-primary' : 'btn-secondary')} btn-sm px-4 confirm-btn"
-                                            data-idx="${globalIdx}" ${item.isConfirmed || !canConfirm ? 'disabled' : ''}>
-                                        ${item.isConfirmed ? 'Confirmed' : 'Confirm'}
-                                    </button>
-                                </td>
-                            `;
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <button class="btn ${item.isConfirmed ? 'btn-success' : (canConfirm ? 'btn-primary' : 'btn-secondary')} btn-sm px-4 confirm-btn"
+                                                    data-idx="${globalIdx}" ${item.isConfirmed || !canConfirm ? 'disabled' : ''}>
+                                                ${item.isConfirmed ? 'Confirmed' : 'Confirm'}
+                                            </button>
+                                        </td>
+                                    `;
                 tbody.appendChild(row);
             });
             attachEvents();
         }
-
         function attachEvents() {
             document.querySelectorAll(".status-select").forEach(sel => {
                 sel.addEventListener("change", e => {
@@ -404,11 +387,11 @@
                 link.addEventListener("click", e => {
                     e.preventDefault();
                     const idx = e.target.dataset.idx;
-                    showHistoryModal(verificationData[idx].History, verificationData[idx].crfId, verificationData[idx].releaseTypeText);
+                    const item = verificationData[idx];
+                    showHistoryModal(item.History, item.crfId, item.releaseDate, item.releaseTypeText);
                 });
             });
         }
-
         function updateConfirmButton(idx) {
             const item = verificationData[idx];
             const can = item.workingStatus && (item.remarks || "").trim();
@@ -419,8 +402,6 @@
                 btn.innerHTML = item.isConfirmed ? 'Confirmed' : 'Confirm';
             }
         }
-
-        // Pagination, Search, Export (unchanged)
         document.getElementById("prevPage").addEventListener("click", e => {
             e.preventDefault();
             if (currentPage > 1) {
@@ -476,10 +457,7 @@
             const today = new Date().toISOString().slice(0, 10);
             XLSX.writeFile(wb, `Daily_Release_Verification_${today}.xlsx`);
         });
-
-        // === FIXED saveItem FUNCTION ===
         async function saveItem(item) {
-            // Client-side validation
             if (!item.workingStatus) {
                 showToast("Please select a Status", "danger");
                 return;
@@ -488,7 +466,6 @@
                 showToast("Remarks are mandatory", "danger");
                 return;
             }
-
             const fileInput = document.querySelector(`.file-input[data-idx="${verificationData.indexOf(item)}"]`);
             const file = fileInput?.files[0];
             let attachmentBase64 = null, attachmentName = null, attachmentMime = null;
@@ -497,21 +474,19 @@
                 attachmentName = file.name;
                 attachmentMime = file.type;
             }
-
             const payload = [{
                 crfId: item.crfId,
                 requestId: item.requestId || null,
-                releaseDate: item.releaseDate,                    // ← Critical: Now sent!
+                releaseDate: item.releaseDate,
                 workingStatus: item.workingStatus,
                 remarks: item.remarks?.trim() || null,
                 attachmentName: attachmentName || item.attachmentName || null,
                 attachmentBase64: attachmentBase64,
                 attachmentMime: attachmentMime
             }];
-
             const token = localStorage.getItem('jwtToken');
             try {
-                const res = await fetch('/api/DailyVerification/Save', {
+                const res = await fetch('/api/Verification/Save', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -519,10 +494,8 @@
                     },
                     body: JSON.stringify(payload)
                 });
-
                 if (res.ok) {
                     showToast("Saved successfully!", "success");
-                    // Refresh data with current filters
                     const currentFilters = {
                         fromDate: document.getElementById("fromDate").value,
                         toDate: document.getElementById("toDate").value,
@@ -537,7 +510,7 @@
                         testerTL: currentFilters.testerTL,
                         testerName: currentFilters.testerName
                     };
-                    const refreshRes = await fetch('/api/DailyVerification', {
+                    const refreshRes = await fetch('/api/Verification', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -588,21 +561,19 @@
                 showToast("Error: " + err.message, "danger");
             }
         }
-
         function showToast(message, type = "success") {
             const toast = document.createElement("div");
             toast.className = `toast align-items-center text-white bg-${type} border-0 position-fixed bottom-0 end-0 m-3`;
             toast.style.zIndex = 9999;
             toast.innerHTML = `
-                        <div class="d-flex">
-                            <div class="toast-body">${message}</div>
-                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                        </div>`;
+                                <div class="d-flex">
+                                    <div class="toast-body">${message}</div>
+                                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                                </div>`;
             document.body.appendChild(toast);
             new bootstrap.Toast(toast).show();
             setTimeout(() => toast.remove(), 3000);
         }
-
         function fileToBase64(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -611,19 +582,15 @@
                 reader.readAsDataURL(file);
             });
         }
-
-        function showHistoryModal(history, crfId, type) {
+        function showHistoryModal(history, crfId, releaseDate, type) {
             const isDaily = type?.includes("Daily");
             const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
             const badgeText = isDaily ? "Daily" : "Exp.";
-
             let timelineHtml = "";
             if (history.length === 0) {
                 timelineHtml = `<p class='text-center text-muted py-5'>No verification history available</p>`;
             } else {
-                // Sort by date descending (latest first)
                 history.sort((a, b) => new Date(b.verified_on) - new Date(a.verified_on));
-
                 timelineHtml = history.map((h, index) => {
                     const initials = h.verified_by ? h.verified_by.trim().split(' ').map(n => n[0]).join('').toUpperCase() : '??';
                     const statusColor =
@@ -632,78 +599,67 @@
                                 h.status_text === 'In Progress' ? 'bg-warning' :
                                     h.status_text === 'Data need to capture' ? 'bg-info' :
                                         h.status_text === 'User feedback pending' ? 'bg-secondary' : 'bg-primary';
-
                     return `
-                                <div class="d-flex gap-4 py-4 ${index < history.length - 1 ? 'border-bottom' : ''}">
-                                    <!-- Timeline dot + line -->
-                                    <div class="flex-shrink-0 position-relative">
-                                        <div class="bg-white rounded-circle border border-3 border-white shadow-sm d-flex align-items-center justify-content-center text-white fw-bold ${statusColor}" style="width:50px;height:50px;">
-                                            ${initials}
-                                        </div>
-                                        ${index < history.length - 1 ? '<div class="position-absolute top-50 start-50 translate-middle-x bg-light" style="width:2px; height:70px; margin-top:30px;"></div>' : ''}
-                                    </div>
-                                    <!-- Content -->
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <h6 class="mb-1 fw-bold">${h.verified_by || 'Unknown User'}</h6>
-                                                <small class="text-muted">${h.verified_on || ''}</small>
+                                        <div class="d-flex gap-4 py-4 ${index < history.length - 1 ? 'border-bottom' : ''}">
+                                            <div class="flex-shrink-0 position-relative">
+                                                <div class="bg-white rounded-circle border border-3 border-white shadow-sm d-flex align-items-center justify-content-center text-white fw-bold ${statusColor}" style="width:50px;height:50px;">
+                                                    ${initials}
+                                                </div>
+                                                ${index < history.length - 1 ? '<div class="position-absolute top-50 start-50 translate-middle-x bg-light" style="width:2px; height:70px; margin-top:30px;"></div>' : ''}
                                             </div>
-                                            <span class="badge ${statusColor} px-3 py-2">${h.status_text || 'Unknown'}</span>
-                                        </div>
-                                        ${h.remarks ? `
-                                        <div class="mt-3 p-3 bg-light rounded small border">
-                                            ${h.remarks.replace(/\n/g, '<br>')}
-                                        </div>` : '<em class="text-muted small mt-2 d-block">No remarks provided</em>'}
+                                            <div class="flex-grow-1">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <h6 class="mb-1 fw-bold">${h.verified_by || 'Unknown User'}</h6>
+                                                        <small class="text-muted">${h.verified_on || ''}</small>
+                                                    </div>
+                                                    <span class="badge ${statusColor} px-3 py-2">${h.status_text || 'Unknown'}</span>
+                                                </div>
+                                                ${h.remarks ? `
+                                                <div class="mt-3 p-3 bg-light rounded small border">
+                                                    ${h.remarks.replace(/\n/g, '<br>')}
+                                                </div>` : '<em class="text-muted small mt-2 d-block">No remarks provided</em>'}
                                                 ${h.attachment_name ? `
-        <div class="mt-2">
-            <a href="/api/DailyVerification/Attachment/${encodeURIComponent(crfId)}/${encodeURIComponent(type.includes('Daily') ? '16-DEC-2025' : 'EXP-DATE')}"
-               target="_blank"
-               class="badge bg-info text-dark text-decoration-none">
-                <i class="fas fa-download me-1"></i>${h.attachment_name}
-            </a>
-        </div>` : ''}
-                                    </div>
-                                </div>`;
+                                                <div class="mt-2">
+                                                    <a href="/api/Verification/Attachment/${encodeURIComponent(crfId)}/${encodeURIComponent(releaseDate)}"
+                                                       target="_blank"
+                                                       class="badge bg-info text-dark text-decoration-none">
+                                                        <i class="fas fa-paperclip me-1"></i>${h.attachment_name}
+                                                    </a>
+                                                </div>` : ''}
+                                            </div>
+                                        </div>`;
                 }).join('');
             }
-
             const modalHtml = `
-                        <div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel">
-                            <div class="modal-dialog modal-lg">
-                                <div class="modal-content border-0 shadow-lg">
-                                    <div class="modal-header bg-primary text-white">
-                                        <h5 class="modal-title" id="historyModalLabel">
-                                            Verification History: <strong>${crfId}</strong>
-                                            <span class="badge ${badgeCls} ms-2">${badgeText}</span>
-                                        </h5>
-                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                <div class="modal fade" id="historyModal" tabindex="-1">
+                                    <div class="modal-dialog modal-lg">
+                                        <div class="modal-content border-0 shadow-lg">
+                                            <div class="modal-header bg-primary text-white">
+                                                <h5 class="modal-title">
+                                                    Verification History: <strong>${crfId}</strong>
+                                                    <span class="badge ${badgeCls} ms-2">${badgeText}</span>
+                                                </h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body" style="max-height:70vh; overflow-y:auto;">
+                                                ${timelineHtml}
+                                            </div>
+                                            <div class="modal-footer border-0">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="modal-body" style="max-height:70vh; overflow-y:auto;">
-                                        ${timelineHtml}
-                                    </div>
-                                    <div class="modal-footer border-0">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>`;
-
-            // Remove any existing modal first
+                                </div>`;
             const existing = document.getElementById('historyModal');
             if (existing) existing.remove();
-
-            // Append and show
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = new bootstrap.Modal('#historyModal');
+            const modal = new bootstrap.Modal(document.getElementById('historyModal'));
             modal.show();
-
-            // Cleanup on hide
             document.getElementById('historyModal').addEventListener('hidden.bs.modal', () => {
                 document.getElementById('historyModal').remove();
             });
         }
-
         document.addEventListener("DOMContentLoaded", () => {
             loadFilterDropdowns();
         });
