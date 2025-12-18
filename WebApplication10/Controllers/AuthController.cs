@@ -2,7 +2,6 @@
 using Oracle.ManagedDataAccess.Client;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
-using System.Text;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 
@@ -14,11 +13,13 @@ namespace WebApplication10.Controllers
     {
         private readonly IConfiguration _configuration;
         private readonly string _oracleConnectionString;
+        private readonly SymmetricSecurityKey _signingKey;
 
-        public AuthController(IConfiguration configuration)
+        public AuthController(IConfiguration configuration, SymmetricSecurityKey signingKey)
         {
             _configuration = configuration;
             _oracleConnectionString = _configuration.GetConnectionString("OracleConnection");
+            _signingKey = signingKey;
         }
 
         [HttpPost("login")]
@@ -41,23 +42,21 @@ namespace WebApplication10.Controllers
                 string empCode = reader["emp_code"]?.ToString() ?? "";
                 string empName = reader["emp_name"]?.ToString() ?? "Unknown User";
 
-                // Simple password check (upgrade to hashing later!)
                 if (dbPassword == request.Password)
                 {
                     var token = GenerateJwtToken(empCode, empName);
 
-                    // Set as HttpOnly cookie
                     Response.Cookies.Append("jwtToken", token, new CookieOptions
                     {
                         HttpOnly = true,
-                        Secure = true,          // true for HTTPS
+                        Secure = true,
                         SameSite = SameSiteMode.Strict,
                         Expires = DateTime.UtcNow.AddHours(8)
                     });
 
                     return Ok(new
                     {
-                        token,        // still send for client if needed
+                        token,
                         empName,
                         empCode
                     });
@@ -70,22 +69,25 @@ namespace WebApplication10.Controllers
         private string GenerateJwtToken(string empCode, string empName)
         {
             var jwtSettings = _configuration.GetSection("Jwt");
-            var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
+
             var claims = new List<Claim>
-    {
-        new Claim(ClaimTypes.NameIdentifier, empCode),
-        new Claim(ClaimTypes.Name, empName), 
-        new Claim(ClaimTypes.GivenName, empName),
-        new Claim(JwtRegisteredClaimNames.Sub, empCode),
-        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-    };
+            {
+                new Claim(ClaimTypes.NameIdentifier, empCode),
+                new Claim(ClaimTypes.Name, empName),
+                new Claim(ClaimTypes.GivenName, empName),
+                new Claim(JwtRegisteredClaimNames.Sub, empCode),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
                 Expires = DateTime.UtcNow.AddHours(8),
                 Issuer = jwtSettings["Issuer"],
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+                Audience = jwtSettings["Audience"],
+                SigningCredentials = new SigningCredentials(_signingKey, SecurityAlgorithms.HmacSha256Signature)
             };
+
             var tokenHandler = new JwtSecurityTokenHandler();
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
@@ -96,7 +98,7 @@ namespace WebApplication10.Controllers
         public IActionResult Dashboard()
         {
             var empName = User.FindFirst(ClaimTypes.GivenName)?.Value ?? "User";
-            return Ok(new { Message = $"Welcome {empName}!", User = User.Identity?.Name });
+            return Ok(new { Message = $"Welcome {empName}!" });
         }
     }
 

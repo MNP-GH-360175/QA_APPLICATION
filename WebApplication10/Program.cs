@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddControllersWithViews();
 
-// CORS - Allow your frontend (adjust in production!)
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -17,10 +17,17 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader());
 });
 
-// JWT Authentication
+// === JWT Setup - Symmetric Key (HS256) ===
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var key = Encoding.UTF8.GetBytes(jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key not configured"));
+var keyBytes = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 
+// Create singleton key with kid
+var signingKey = new SymmetricSecurityKey(keyBytes);
+signingKey.KeyId = "1"; // Important: adds kid="1" to token header
+
+builder.Services.AddSingleton(signingKey);
+
+// JWT Authentication
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -31,15 +38,17 @@ builder.Services.AddAuthentication(options =>
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
-        ValidateAudience = false,
+        ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings["Issuer"],
-        IssuerSigningKey = new SymmetricSecurityKey(key),
-        ClockSkew = TimeSpan.FromMinutes(5) // Grace period for clock drift
+        ValidAudience = jwtSettings["Audience"],
+        IssuerSigningKey = signingKey, // ← Only this — no Configuration!
+        ClockSkew = TimeSpan.FromMinutes(5)
     };
 
-    // Optional: Show detailed errors in development
+    // No options.Configuration, no options.Authority, no JWKS loading
+
     options.Events = new JwtBearerEvents
     {
         OnAuthenticationFailed = context =>
@@ -54,7 +63,7 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
-// Middleware pipeline - ORDER MATTERS!
+// Middleware
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -63,14 +72,11 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
 app.UseRouting();
 
-// CORS MUST come before Authentication/Authorization
 app.UseCors("AllowAll");
-
-app.UseAuthentication();  // Validates JWT
-app.UseAuthorization();   // Applies [Authorize] attributes
+app.UseAuthentication();  // Must be before UseAuthorization
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapControllerRoute(
