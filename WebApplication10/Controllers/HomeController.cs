@@ -516,5 +516,11 @@ namespace WebApplication10.Controllers
 
             return View(model);
         }
+        public IActionResult DailyVerificationTL()
+        {
+            if (!IsAuthenticated()) return RedirectToLogin();
+            return View();
+        }
+    
     }
 }

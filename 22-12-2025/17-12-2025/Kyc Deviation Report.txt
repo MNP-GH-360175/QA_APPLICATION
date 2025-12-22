@@ -1,0 +1,303 @@
+Create a new page called KYC Deviation report
+
+page  required from date and to date selection and submit button. After submit
+
+need to view like excel grid view 
+
+SNO	KYC DEVIATION	COUNT	Status
+1	New Customer Creation	13603	
+2	Customer onboard Without Photo	3	New customer Create without photo On Board
+3	Pan is not collected for pledges> 5 Lacks	0	
+4	Transaction without Aadhar card mask	0	Transaction without Adhar card mask
+5	Invalid Aadhaar Number	0	
+6	Invalid Passport Number	0	
+7	Kyc id number less than 8 Digit	0	
+8	Transacted Kyc Document Not Upload in System	0	 
+9	Kyc Number is not Capture in System	0	
+10	Kyc document Upload and Number Captured not Masked Aadhar	0	
+11	Pan updated other than P, in 4th Alphabets Position	0	
+12	Transacted with Expired Passport and Driving License	0	
+13	Transacted without Photo	0	
+14	New Customer Created without Aadhar masked	0	
+15	NREGA Customer created on Board inValid Id Number	0	
+16	Transaction---- Pancard 4th Letter without P	0	
+17	Transacted with Passport and Driving License Expired date is Null or issue date is null	0	0
+18	Customer Transacted Below 18 years and Above 100 Years	0	
+19	Duplicate Kyc Id Number	0	New customer created Duplicate id number
+20	NPR Customer created on Board in Valid Id Number	0	
+21	Customer Creation Neft Duplicate IFSC code and Acc no	0	
+22	Simplified KYC customer creation 		TWF
+23	Customer creation without form60 and PAN card	7	
+24	Customer transacted without from60/ PAN card pledge amount above 50000		
+25	Customer creation without KYC document	10	
+26	Transaction with kyc no less than 8		
+27	Adding Duplication pan card	0	
+28	customer created with below 18 or above 100 age	0	
+-------------------------------------------------------------------------------------------------------------------------------------------
+Report query 
+------------
+-----------------------------------1. Total customer id ---------------------------
+
+select t.cust_id from mana0809.customer t where to_date(t.created_date) between '18-Aug-2025' and '20-Aug-2025';
+
+
+
+
+-----------------------------------2.customer on board without photo---------------
+select distinct m.cust_id,t.branch_id,t.created_by,t.created_date  from mana0809.customer t,mana0809.customer_photo m
+where t.cust_id=m.cust_id
+and to_date(t.created_date) between '18-Aug-2025' and '20-Aug-2025'
+and m.pledge_photo is null;
+
+
+-----------------------------------3.Pan is not collected pledges> 5 lakh-----------
+
+select count(*) from mana0809.pledge_master t,dms.deposit_pan_detail m
+where t.cust_id=m.cust_id and to_date(t.tra_dt) ='06-feb-2024' and t.pledge_val>400000 and m.pan is null;
+
+-----------------------------------4.Invalid Adharno--------------------------------------- digit count----
+select t.cust_id,t.created_by from mana0809.customer t,mana0809.identity_dtl m
+where t.cust_id=m.cust_id
+and (t.created_date) ='06-feb-2024'
+and m.identity_id in(505,16,555)
+and length(m.id_number) <>12;
+
+
+------------------------------------5.Invalid passport no----------------------------
+select count(*) from mana0809.customer t,mana0809.identity_dtl m
+where t.cust_id=m.cust_id
+and (t.created_date)='06-feb-2024'
+and m.id_number='1'
+and length(m.id_number)<>8;
+
+
+
+-------------------------------------6.Kyc Number Lessthan 8 digit-------------------
+select distinct m.cust_id from mana0809.customer t,mana0809.identity_dtl m
+where t.cust_id=m.cust_id
+and (t.created_date) ='06-feb-2024'
+and length(m.id_number)<8;
+
+-------------------------------------7.Aadhar card not masked------------------------
+select  j.Cust_id,j.ID_Number,j.type1,m.reg_date from ( select Cust_id,ID_Number, case when regexp_like(ID_Number, '^-?[[:digit:],.]*$') then 'Numeric' else 'Non-Numeric' end as type1
+   from mana0809.identity_dtl where identity_id in (16,505,555))j,
+   mana0809.customer_detail m
+   where type1='Numeric'
+   and length(ID_Number)=12
+   and m.cust_id=j.cust_id
+   and trunc(m.reg_date)='06-feb-2024' ;
+   
+     
+-------------------------------------8.kyc doc not upload ---------------------------
+
+select distinct m.cust_id, s.pledge_no from mana0809.customer t,mana0809.customer_photo m,mana0809.pledge_master s
+where t.cust_id=m.cust_id
+and m.cust_id=s.cust_id
+and trunc(s.tradate)  ='06-feb-2024'
+and m.kyc_photo is null;
+
+
+
+
+
+-------------------------------------9.kyc number not capture in system--------------
+
+select distinct m.cust_id from mana0809.customer t,mana0809.identity_dtl m,mana0809.pledge_master s
+where t.cust_id=m.cust_id
+and m.cust_id=s.cust_id
+and trunc(s.tradate)  ='06-feb-2024'
+and m.id_number is  null;
+
+
+
+
+--------------------------------------10.Transaction with out photo------------------
+
+select distinct m.cust_id from mana0809.customer t,mana0809.customer_photo m,mana0809.pledge_master s
+where t.cust_id=m.cust_id
+and m.cust_id=s.cust_id
+and trunc(s.tra_dt) ='06-feb-2024'
+and m.pledge_photo is null;
+
+
+
+
+---------------------------------------11.Pan updated Other than Alphapet position P-----------
+
+select distinct t.cust_id from mana0809.customer t,dms.deposit_pan_detail k,mana0809.pledge_master s
+where substr(upper(k.pan),4,1) not in('P')
+and length (k.pan)=10
+and t.cust_id=k.cust_id
+and k.cust_id=s.cust_id
+and trunc(t.created_date) ='06-feb-2024' ;
+
+
+
+
+-----------------------------------------12.Transacted with expiry passport and DL-------------
+select distinct m.cust_id,m.identity_id,p.pledge_no,t.created_date,m.issue_dt,m.exp_dt
+  from mana0809.customer        t,
+       mana0809.identity_dtl    m,
+       mana0809.customer_detail k,
+       mana0809.pledge_master   p
+ where t.cust_id = m.cust_id
+   and m.cust_id = k.cust_id
+   and k.cust_id = p.cust_id
+   and to_date(p.tra_dt) ='06-feb-2024'
+   and m.identity_id in (1, 2,502)
+   
+  --and m.exp_dt is null;
+and (m.exp_dt) + 30 < to_date(p.tra_dt);
+
+
+
+----------------------------------------13.kyc doc upload mask------Transaction without mask-----
+select distinct t.cust_id ,s.branch_id from mana0809.customer t,mana0809.identity_dtl m,mana0809.pledge_master s,mana0809.customer_photo k
+where t.cust_id=m.cust_id
+and m.cust_id=s.cust_id
+and s.cust_id=k.cust_id
+and trunc(s.tradate) ='06-feb-2024'
+and m.id_number not in(
+select id_number
+from mana0809.identity_dtl
+where REGEXP_like(m.id_number,'[A-Z][A-Z][A-Z][A-Z][A-Z][A-Z][A-Z][A-Z][0-9][0-9][0-9][0-9]'))
+and m.identity_id in(16,505,555)
+and  k.pledge_photo is not null
+and m.id_number is not null;
+
+
+
+----------------------------------------14.  masked onboard-------------------------------
+
+
+
+select distinct m.cust_id,m.id_number,t.created_by from mana0809.customer t,mana0809.identity_dtl m,mana0809.customer_detail k
+where t.cust_id=m.cust_id
+and m.cust_id=k.cust_id
+and to_date(t.created_date) ='06-feb-2024'
+and m.identity_id in(16,505,555)
+and m.id_number not in(
+select id_number
+from mana0809.identity_dtl
+where REGEXP_like(m.id_number,'[A-Z][A-Z][A-Z][A-Z][A-Z][A-Z][A-Z][A-Z][0-9][0-9][0-9][0-9]'));
+
+
+--------------------------------------15. NREGA Validation   17 to 21-------------------------
+select distinct m.cust_id from mana0809.customer t,mana0809.identity_dtl m,mana0809.customer_photo k
+where t.cust_id=m.cust_id
+and m.cust_id=k.cust_id
+and to_date(t.created_date) ='06-feb-2024'
+and m.identity_id in(17)
+and length(m.id_number) not in('17','18','19','20','21');
+
+
+--------------------------------------16. NPR Validation 12 to 16-------------------------------------
+
+
+select distinct t.cust_id from mana0809.customer t,mana0809.identity_dtl m,mana0809.customer_photo k
+where t.cust_id=m.cust_id
+and m.cust_id=k.cust_id
+and (t.created_date)='06-feb-2024'
+and m.identity_id in(18)
+and m.id_number not in('12','13','14','15','16');
+
+
+
+
+----------------------------------------17. Transactioned Pancard 4th Letter P----------------------------
+
+select distinct t.cust_id,s.tra_dt from mana0809.customer t,dms.deposit_pan_detail k,mana0809.pledge_master s
+where substr(upper(k.pan),4,1) not in('P')
+and length (k.pan)=10
+and t.cust_id=k.cust_id
+and k.cust_id=s.cust_id
+and trunc(s.tra_dt) ='05-feb-2024';
+
+
+
+
+-----------------------------------------18.Age Limit Below 18 and Above 100 years----------------------------
+select * from mana0809.customer_detail tt where tt.cust_id in(select a.cust_id from mana0809.tbl_pledge_yesterday_live a where a.cust_id in
+(select t.cust_id from mana0809.customer_detail t where t.date_of_birth>='05-feb-2006'))-- and '10-Nov-2023'); --and t.reg_date='21-Dec-2022';
+
+                     
+------------------------------------------19.Above 100 years-------------------------------------------------
+select * from mana0809.customer_detail tt where tt.cust_id in (select a.cust_id from mana0809.tbl_pledge_yesterday_live a where a.cust_id in
+(select t.cust_id from mana0809.customer_detail t where t.date_of_birth<='06-feb-1924'));
+
+
+
+------------------------------------------20. Duplicate Id Number------------------------------------------
+
+select t.id_number,t.identity_id, count(t.cust_id)
+from mana0809.identity_dtl t,mana0809.customer c where c.cust_id=t.cust_id and to_date(c.created_date) ='06-feb-2024' and c.isactive=1---and c.created_date between '01-Dec-2022' and '31-Dec-2022'
+group by t.id_number,t.identity_id
+   having count(t.cust_id) >1;
+   
+   
+
+
+--------------------------------------------21.Acc no And Ifsc Code---------------------------------------
+select t.ifsc_code,t.beneficiary_account,count(t.cust_id)
+from mana0809.neft_customer t,mana0809.customer c where c.cust_id=t.cust_id and to_date(c.created_date) ='06-feb-2024'  and c.isactive=1---and c.created_date between '01-Dec-2022' and '31-Dec-2022'
+group by t.ifsc_code,t.beneficiary_account
+having count(t.cust_id) >1;
+
+
+
+---------------------------------------------22.Simplified kyc customer creation--------------------------
+
+   select c.cust_id,
+              c.branch_id,
+             c.created_by,
+             c.created_date ,i.identity_id,i.id_number from    mana0809.customer c,
+             mana0809.identity_dtl i where c.cust_id = i.cust_id
+             and i.identity_id not in(1,2,3,16,17,18,501, 502,503,505,555) and to_date(c.created_date)='06-feb-2024' ;
+               
+
+
+
+---------------------------------------------23.customer ID created without PAN/FORM60-------------------
+
+
+ SELECT *
+   FROM MANA0809.CUSTOMER C
+  WHERE to_date(c.created_date) ='06-feb-2024'
+    and C.CUST_ID not in (SELECT f.cust_id FROM dms.TBL_CUSTOMER_FORM60 F)
+    and c.cust_id not in (select p.cust_id from dms.deposit_pan_detail P);
+       
+                                                                                         
+---------------------------------------------24.Transaction above 50000 without form60 and PAN card---------
+ 
+ 
+ select p.cust_id,
+        p.pledge_no,
+        p.pledge_val,
+        p.balance,
+        p.branch_id,
+        s.status_id
+   from mana0809.pledge_master p, mana0809.pledge_status s
+  where p.pledge_no = s.pledge_no
+    and p.cust_id in
+        (SELECT c.cust_id
+           FROM MANA0809.CUSTOMER C
+          WHERE to_date(c.created_date) = '06-feb-2024'
+            and C.CUST_ID not in
+                (SELECT f.cust_id FROM dms.TBL_CUSTOMER_FORM60 F)
+            and c.cust_id not in
+                (select p.cust_id from dms.deposit_pan_detail P) and p.pledge_val>50000);
+               
+
+----------------------------------------25.CUSTOMER ID CREATION WITHOUT KYC DOCUMENT------------
+
+
+
+SELECT C.BRANCH_ID, C.CUST_ID, C.CREATED_BY,c.created_date
+  FROM MANA0809.CUSTOMER C, MANA0809.CUSTOMER_PHOTO P
+ WHERE P.CUST_ID = C.CUST_ID
+   AND TO_DATE(C.CREATED_DATE)= '06-feb-2024'
+   AND P.KYC_PHOTO IS NULL;
+
+Create a backend procedure using this query as  indivual flag 
+
+that procedure need to call to this front end shows as same like excel file into the new page

@@ -1,0 +1,344 @@
+CREATE OR REPLACE PROCEDURE proc_KYC_DEVIATION_REPORT(
+    p_from_date IN DATE,
+    p_to_date   IN DATE,
+    p_cursor    OUT SYS_REFCURSOR
+) AS
+BEGIN
+    OPEN p_cursor FOR
+    WITH date_range AS (
+        SELECT TRUNC(p_from_date) AS start_dt,
+               TRUNC(p_to_date)   AS end_dt
+        FROM dual
+    )
+    SELECT
+        ROWNUM AS SNO,
+        DESCRIPTION AS KYC_DEVIATION,
+        DEVIATION_COUNT AS COUNT_COL,
+        STATUS_NOTE AS STATUS
+    FROM (
+        -- 1. New Customer Creation
+        SELECT 1 AS ORD, 'New Customer Creation' AS DESCRIPTION,
+               (SELECT COUNT(*)
+                FROM mana0809.customer t
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range)
+                                                AND (SELECT end_dt FROM date_range)) AS DEVIATION_COUNT,
+               '' AS STATUS_NOTE
+        FROM dual
+
+       UNION ALL
+        -- 2. Customer onboard Without Photo
+        SELECT 2, 'Customer onboard Without Photo',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                LEFT JOIN mana0809.customer_photo m ON t.cust_id = m.cust_id AND m.pledge_photo IS NOT NULL
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.cust_id IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 3. Pan not collected for pledges > 5 Lakhs
+        SELECT 3, 'Pan is not collected for pledges > 5 Lakhs',
+               (SELECT COUNT(*)
+                FROM mana0809.pledge_master t
+                LEFT JOIN dms.deposit_pan_detail m ON t.cust_id = m.cust_id
+                WHERE TRUNC(t.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND t.pledge_val > 500000
+                  AND m.pan IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 4. Invalid Aadhaar Number
+        SELECT 4, 'Invalid Aadhaar Number',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id IN (16, 505, 555)
+                  AND LENGTH(TRIM(m.id_number)) != 12),
+               ''
+        FROM dual
+
+       /* UNION ALL
+        -- 5. Invalid Passport Number
+        SELECT 5, 'Invalid Passport Number',
+               (SELECT COUNT(*)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id = 1
+                  AND LENGTH(TRIM(m.id_number)) < 8),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 6. KYC ID less than 8 digits
+        SELECT 6, 'Kyc id number less than 8 Digit',
+               (SELECT COUNT(DISTINCT m.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND LENGTH(TRIM(m.id_number)) < 8),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 7. Aadhaar not masked
+        SELECT 7, 'Aadhar card not masked',
+               (SELECT COUNT(DISTINCT j.cust_id)
+                FROM (
+                    SELECT cust_id
+                    FROM mana0809.identity_dtl
+                    WHERE identity_id IN (16,505,555)
+                      AND REGEXP_LIKE(id_number, '^[0-9]{12}$')
+                      AND id_number NOT LIKE 'XXXXXX%'
+                ) j
+                JOIN mana0809.customer_detail m ON m.cust_id = j.cust_id
+                WHERE TRUNC(m.reg_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 8. KYC Document Not Uploaded
+        SELECT 8, 'Kyc Document Not Upload',
+               (SELECT COUNT(DISTINCT s.cust_id)
+                FROM mana0809.pledge_master s
+                LEFT JOIN mana0809.customer_photo k ON s.cust_id = k.cust_id AND k.kyc_photo IS NOT NULL
+                WHERE TRUNC(s.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND k.cust_id IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 9. KYC Number not captured
+        SELECT 9, 'Kyc number not capture in system',
+               (SELECT COUNT(DISTINCT s.cust_id)
+                FROM mana0809.pledge_master s
+                JOIN mana0809.customer t ON t.cust_id = s.cust_id
+                LEFT JOIN mana0809.identity_dtl m ON m.cust_id = s.cust_id AND m.id_number IS NOT NULL
+                WHERE TRUNC(s.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.cust_id IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 10. Transaction without photo
+        SELECT 10, 'Transaction with out photo',
+               (SELECT COUNT(DISTINCT s.cust_id)
+                FROM mana0809.pledge_master s
+                LEFT JOIN mana0809.customer_photo m ON m.cust_id = s.cust_id AND m.pledge_photo IS NOT NULL
+                WHERE TRUNC(s.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.cust_id IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 11. PAN 4th character not 'P'
+        SELECT 11, 'Pan updated Other than Alphabet position P',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN dms.deposit_pan_detail k ON t.cust_id = k.cust_id
+                JOIN mana0809.pledge_master s ON k.cust_id = s.cust_id
+                WHERE SUBSTR(UPPER(k.pan), 4, 1) != 'P'
+                  AND LENGTH(k.pan) = 10
+                  AND TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 12. Transacted with expired passport/DL
+        SELECT 12, 'Transacted with expiry passport and DL',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.customer_detail k ON m.cust_id = k.cust_id
+                JOIN mana0809.pledge_master p ON k.cust_id = p.cust_id
+                WHERE TRUNC(p.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id IN (1, 2, 502)
+                  AND m.exp_dt IS NOT NULL
+                  AND m.exp_dt + 30 < p.tra_dt),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 13. KYC doc upload but not masked
+        SELECT 13, 'kyc doc upload mask-Transaction without mask',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.pledge_master s ON m.cust_id = s.cust_id
+                JOIN mana0809.customer_photo k ON s.cust_id = k.cust_id
+                WHERE TRUNC(s.tradate) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id IN (16,505,555)
+                  AND k.pledge_photo IS NOT NULL
+                  AND m.id_number IS NOT NULL
+                  AND NOT REGEXP_LIKE(m.id_number, '^[A-Z]{8}[0-9]{4}$')),  -- Example masking pattern XXXX XXXX XXXX
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 14. Masked onboard (onboarded with masked Aadhaar)
+        SELECT 14, 'masked onboard',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.customer_detail k ON m.cust_id = k.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id IN (16,505,555)
+                  AND NOT REGEXP_LIKE(m.id_number, '^[A-Z]{8}[0-9]{4}$')),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 15. NREGA Validation (length not 17-21)
+        SELECT 15, 'NREGA Validation 17 to 21',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.customer_photo k ON m.cust_id = k.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id = 17
+                  AND LENGTH(m.id_number) NOT BETWEEN 17 AND 21),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 16. NPR Validation (length not 12-16)
+        SELECT 16, 'NPR Validation 12 to 16',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN mana0809.identity_dtl m ON t.cust_id = m.cust_id
+                JOIN mana0809.customer_photo k ON m.cust_id = k.cust_id
+                WHERE TRUNC(t.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND m.identity_id = 18
+                  AND LENGTH(m.id_number) NOT BETWEEN 12 AND 16),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 17. Transactioned with PAN 4th letter not P
+        SELECT 17, 'Transactioned Pancard 4th Letter P',
+               (SELECT COUNT(DISTINCT t.cust_id)
+                FROM mana0809.customer t
+                JOIN dms.deposit_pan_detail k ON t.cust_id = k.cust_id
+                JOIN mana0809.pledge_master s ON k.cust_id = s.cust_id
+                WHERE SUBSTR(UPPER(k.pan),4,1) != 'P'
+                  AND LENGTH(k.pan)=10
+                  AND TRUNC(s.tra_dt) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 18. Age Limit Below 18 and Above 100 years
+        SELECT 18, 'Age Limit Below 18 and Above 100 years',
+               (SELECT COUNT(DISTINCT tt.cust_id)
+                FROM mana0809.customer_detail tt
+                JOIN mana0809.tbl_pledge_yesterday_live a ON tt.cust_id = a.cust_id
+                WHERE tt.date_of_birth >= ADD_MONTHS(TRUNC(SYSDATE), -18*12)   -- Below 18
+                   OR tt.date_of_birth <= ADD_MONTHS(TRUNC(SYSDATE), -100*12)), -- Above 100
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 19. Above 100 years only
+        SELECT 19, 'Above 100 years',
+               (SELECT COUNT(DISTINCT tt.cust_id)
+                FROM mana0809.customer_detail tt
+                JOIN mana0809.tbl_pledge_yesterday_live a ON tt.cust_id = a.cust_id
+                WHERE tt.date_of_birth <= ADD_MONTHS(TRUNC(SYSDATE), -100*12)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 20. Duplicate Id Number
+        SELECT 20, 'Duplicate Id Number',
+               (SELECT COUNT(*) FROM (
+                   SELECT 1
+                   FROM mana0809.identity_dtl t
+                   JOIN mana0809.customer c ON c.cust_id = t.cust_id
+                   WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                   GROUP BY t.id_number, t.identity_id
+                   HAVING COUNT(*) > 1
+               )),
+               'Duplicate id number'
+        FROM dual
+
+        UNION ALL
+        -- 21. Duplicate Account + IFSC
+        SELECT 21, 'Acc no And Ifsc Code',
+               (SELECT COUNT(*) FROM (
+                   SELECT 1
+                   FROM mana0809.neft_customer t
+                   JOIN mana0809.customer c ON c.cust_id = t.cust_id
+                   WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                     AND c.isactive = 1
+                   GROUP BY t.ifsc_code, t.beneficiary_account
+                   HAVING COUNT(*) > 1
+               )),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 22. Simplified KYC
+        SELECT 22, 'Simplified kyc customer creation',
+               (SELECT COUNT(DISTINCT c.cust_id)
+                FROM mana0809.customer c
+                JOIN mana0809.identity_dtl i ON c.cust_id = i.cust_id
+                WHERE i.identity_id NOT IN (1,2,3,16,17,18,501,502,503,505,555)
+                  AND TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 23. Customer without PAN/Form60
+        SELECT 23, 'customer ID created without PAN/FORM60',
+               (SELECT COUNT(*)
+                FROM mana0809.customer c
+                WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND c.cust_id NOT IN (SELECT f.cust_id FROM dms.tbl_customer_form60 f)
+                  AND c.cust_id NOT IN (SELECT p.cust_id FROM dms.deposit_pan_detail p)),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 24. Transaction >50k without PAN/Form60
+        SELECT 24, 'Transaction above 50000 without form60 and PAN card',
+               (SELECT COUNT(*)
+                FROM mana0809.pledge_master p
+                WHERE p.cust_id IN (
+                    SELECT c.cust_id
+                    FROM mana0809.customer c
+                    WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                      AND c.cust_id NOT IN (SELECT f.cust_id FROM dms.tbl_customer_form60 f)
+                      AND c.cust_id NOT IN (SELECT pp.cust_id FROM dms.deposit_pan_detail pp)
+                )
+                AND p.pledge_val > 50000),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 25. Customer creation without KYC document
+        SELECT 25, 'CUSTOMER ID CREATION WITHOUT KYC DOCUMENT',
+               (SELECT COUNT(*)
+                FROM mana0809.customer c
+                JOIN mana0809.customer_photo p ON p.cust_id = c.cust_id
+                WHERE TRUNC(c.created_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)
+                  AND p.kyc_photo IS NULL),
+               ''
+        FROM dual
+
+        UNION ALL
+        -- 26. Onboarded age below 18
+        SELECT 26, 'Onboarded age below 18',
+               (SELECT COUNT(*)
+                FROM mana0809.customer_detail k
+                JOIN mana0809.customer t ON k.cust_id = t.cust_id
+                WHERE (TRUNC(k.reg_date) - TRUNC(k.date_of_birth)) / 365.25 < 18
+                  AND TRUNC(k.reg_date) BETWEEN (SELECT start_dt FROM date_range) AND (SELECT end_dt FROM date_range)),
+               ''
+        FROM dual*/
+    )
+    ORDER BY ORD;
+END;
+/
