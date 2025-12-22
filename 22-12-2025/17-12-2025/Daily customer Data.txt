@@ -1,0 +1,54 @@
+Daily Customer Data
+
+-------------------NCA Count-------------------------
+select count(t.cust_id) as total_customers,
+       count(hy.cust_id) as hyperverge_customers,
+       count(jk.cust_id) as jukshio_customers,
+       count(ds.cust_id) as Doorstep_customers,
+       count(ac.cust_id) as Aadhar_Count,
+       count(dg.cust_id) as Digi_Count,
+       count(oc.cust_id) as Other_ID_Count
+  from mana0809.customer t
+  left join (select a.cust_id
+               from mana0809.tbl_hyperverge_log a
+              where a.status = 'IN'
+                and a.cust_id IS NOT NULL
+                and trunc(a.tra_date) = trunc(sysdate)) hy
+    ON t.cust_id = hy.cust_id
+  left join (select c.cust_id
+               from mana0809.tbl_jukshio_log c
+              where c.status = 'completed'
+                and c.cust_id IS NOT NULL
+                and trunc(c.tra_date) = trunc(sysdate)) jk
+    ON t.cust_id = jk.cust_id
+  left join (select g.cust_id
+               from mana0809.tbl_hyperverge_log g
+              where g.status = 'IN'
+                and g.cust_id IS NOT NULL
+                and substr(g.ref_id, 6, 2) = 'DS'
+                and trunc(g.tra_date) = trunc(sysdate)) ds
+    ON t.cust_id = ds.cust_id
+  left join (select j.cust_id
+               from mana0809.identity_dtl j
+              where j.identity_id in (16, 505)) ac
+    on t.cust_id = ac.cust_id
+
+  left join (select kk.cust_id
+               from mana0809.tbl_jukshio_log kk
+              where kk.digilocker_status = 'YES'
+             union all
+             select ll.cust_id
+               from mana0809.tbl_hyperverge_log ll
+              where ll.digilocker_status = 'YES') dg
+    on t.cust_id = dg.cust_id
+
+  left join (select m.cust_id
+               from mana0809.identity_dtl m
+              where m.identity_id not in (16, 505)) oc
+    on t.cust_id = oc.cust_id
+ where trunc(t.created_date) = trunc(sysdate)
+   and t.branch_id <> 0;
+
+----------------Filds------------------------------
+
+

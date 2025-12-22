@@ -21,7 +21,7 @@ namespace WebApplication10.Controllers
             _config = config;
             _connStr = _config.GetConnectionString("OracleConnection");
         }
-
+        
         // FETCH: Daily Verification List
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] FilterModel filters)
