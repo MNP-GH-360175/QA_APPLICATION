@@ -521,6 +521,59 @@ namespace WebApplication10.Controllers
             if (!IsAuthenticated()) return RedirectToLogin();
             return View();
         }
-    
+        [HttpGet]
+        public JsonResult GetTestersForTL(string tlName)
+        {
+            if (string.IsNullOrWhiteSpace(tlName))
+                return Json(new List<object>());
+
+            var testers = new List<object>();
+
+            using var conn = new OracleConnection(_connStr);
+            conn.Open();
+
+            // Map TL name to sub_team (exact match as in your existing logic)
+            int? subTeam = tlName.Trim().ToUpper() switch
+            {
+                "JIJIN E H" => 1,
+                "MURUGESAN P" => 2,
+                "NIKHIL SEKHAR" => 3,
+                "SMINA BENNY" => 4,
+                "VISAGH S" => 5,
+                "JOBY JOSE" => 6,
+                _ => null
+            };
+
+            if (!subTeam.HasValue)
+            {
+                // Optional: Log unknown TL name
+                _logger.LogWarning("Unknown TL name for tester lookup: {TlName}", tlName);
+                return Json(testers);
+            }
+
+            var cmd = new OracleCommand(@"
+        SELECT DISTINCT v.emp_name AS tester_name, v.emp_code AS tester_code
+        FROM mana0809.srm_it_team_members t
+        JOIN mana0809.employee_master v ON t.member_id = v.emp_code
+        WHERE t.team_id = 6
+          AND t.sub_team = :subTeam
+          AND v.status_id = 1
+        ORDER BY v.emp_name", conn);
+
+            cmd.Parameters.Add("subTeam", OracleDbType.Int32).Value = subTeam.Value;
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                testers.Add(new
+                {
+                    text = reader["tester_name"]?.ToString()?.Trim() ?? "Unknown",
+                    value = reader["tester_code"]?.ToString()?.Trim() ?? ""
+                });
+            }
+
+            return Json(testers);
+        }
+
     }
 }
