@@ -1,9 +1,7 @@
 ﻿@using System.Security.Claims
-
 @{
     ViewData["Title"] = "Daily Verification - Tech Lead";
     Layout = "~/Views/Shared/_DashboardLayout.cshtml";
-
     var currentTLName = User.FindFirst(ClaimTypes.GivenName)?.Value ??
                         User.FindFirst(ClaimTypes.Name)?.Value ??
                         User.FindFirst("unique_name")?.Value ?? "";
@@ -12,7 +10,7 @@
 <div class="container-fluid mt-4 px-2 px-md-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3 class="mb-0 text-primary fw-bold">Daily Verification - Tech Lead</h3>
-        <span class="text-muted small">Review tester verifications • Confirm or Return</span>
+        <span class="text-muted small">Review tester verifications • Confirm, Return or Close</span>
     </div>
 
     <!-- Filters -->
@@ -38,7 +36,9 @@
                         </select>
                     </div>
                     <div class="col-lg-3 col-md-6">
-                        <button type="submit" class="btn btn-primary w-100">Search</button>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-search me-2"></i>Search
+                        </button>
                     </div>
                 </div>
             </form>
@@ -76,8 +76,8 @@
                 </table>
             </div>
             <div class="text-center py-5 text-muted" id="tlEmpty" style="display:none;">
-                <h5>No pending verifications</h5>
-                <p>All tester verifications are up to date or returned.</p>
+                <h5>No pending verifications found</h5>
+                <p>Please adjust your filters and try again.</p>
             </div>
         </div>
     </div>
@@ -87,33 +87,65 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
         let tlData = [];
-
         const currentTLName = "@Html.Raw(currentTLName)";
 
+        function getSubTeamId(tlName) {
+            const map = {
+                "JIJIN E H": 1, "MURUGESAN P": 2, "NIKHIL SEKHAR": 3,
+                "SMINA BENNY": 4, "VISAGH S": 5, "JOBY JOSE": 6
+            };
+            return map[tlName?.trim().toUpperCase()] || null;
+        }
+
         async function loadMyTesters() {
-            if (!currentTLName || currentTLName.trim() === "") return;
+            if (!currentTLName?.trim()) {
+                console.warn("No TL name found in user claims");
+                return;
+            }
+
+            const subTeamId = getSubTeamId(currentTLName);
+            if (!subTeamId) {
+                document.getElementById('tlTesterSelect').innerHTML = '<option value="">No team assigned</option>';
+                return;
+            }
 
             const token = localStorage.getItem('jwtToken');
-            if (!token) return;
+            const select = document.getElementById('tlTesterSelect');
+            select.innerHTML = '<option value="">Loading team...</option>';
 
             try {
-                const res = await fetch(`/api/Verification/testers/${encodeURIComponent(currentTLName)}`, {
+                const res = await fetch(`/api/Verification/team/${subTeamId}`, {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
 
                 if (res.ok) {
                     const testers = await res.json();
-                    const select = document.getElementById('tlTesterSelect');
+
+                    // Clear and add default "All" option
                     select.innerHTML = '<option value="">All Testers in My Team</option>';
-                    testers.forEach(t => select.add(new Option(t.text, t.value)));
+
+                    if (testers.length === 0) {
+                        select.innerHTML += '<option value="" disabled>No testers found</option>';
+                    } else {
+                        // Add each individual tester
+                        testers.forEach(t => {
+                            if (t.text && t.value) {
+                                const option = new Option(t.text, t.value);
+                                select.add(option);
+                            }
+                        });
+                    }
+                } else {
+                    select.innerHTML = '<option value="">Error loading team</option>';
                 }
             } catch (err) {
-                console.error("Error loading testers:", err);
+                console.error("Exception loading team:", err);
+                select.innerHTML = '<option value="">Failed to load team</option>';
             }
         }
 
         function formatDateForOracle(dateStr) {
-            if (!dateStr) return "";
+            if (!dateStr) return null;
             const d = new Date(dateStr);
             const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
             return `${String(d.getDate()).padStart(2, '0')}-${months[d.getMonth()]}-${d.getFullYear()}`;
@@ -121,14 +153,10 @@
 
         document.getElementById('tlFilterForm').addEventListener('submit', async e => {
             e.preventDefault();
-
             const from = document.getElementById('tlFromDate').value;
             const to = document.getElementById('tlToDate').value;
-
-            if (!from || !to) {
-                alert("Please select both dates");
-                return;
-            }
+            if (!from || !to) return alert("Select both dates");
+            if (new Date(from) > new Date(to)) return alert("From Date > To Date");
 
             const payload = {
                 fromDate: formatDateForOracle(from),
@@ -138,104 +166,86 @@
             };
 
             const token = localStorage.getItem('jwtToken');
+            const btn = e.target.querySelector('button');
+            btn.disabled = true;
+            btn.innerHTML = 'Searching...';
 
             try {
-                const res = await fetch('/api/Verification/TLView', {
+                const res = await fetch('/api/Verification/tlview', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                     body: JSON.stringify(payload)
                 });
 
-                if (!res.ok) throw new Error(await res.text() || "Failed to load data");
-
+                if (!res.ok) throw new Error(await res.text());
                 tlData = await res.json();
                 renderTLTable();
-
-                document.getElementById('tlResultCard').style.display = tlData.length > 0 ? 'block' : 'none';
-                document.getElementById('tlEmpty').style.display = tlData.length === 0 ? 'block' : 'none';
+                document.getElementById('tlResultCard').style.display = 'block';
+                document.getElementById('tlEmpty').style.display = tlData.length ? 'none' : 'block';
             } catch (err) {
                 alert("Error: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-search me-2"></i>Search';
             }
         });
 
         function renderTLTable() {
             const tbody = document.getElementById('tlBody');
             tbody.innerHTML = '';
+            if (!tlData.length) return;
 
-            if (tlData.length === 0) return;
-
-            const statusMap = { 1: 'Working', 2: 'Not Working', 3: 'In Progress', 4: 'Data need to capture', 5: 'User feedback pending' };
+            const statusMap = { 1: 'Working', 2: 'Not Working', 3: 'In Progress', 4: 'Data need to capture', 5: 'User feedback pending', 6: 'On Hold' };
 
             tlData.forEach(item => {
+                const status = statusMap[item.WORKING_STATUS] || 'Pending';
                 const row = document.createElement('tr');
-                const testerStatus = statusMap[item.WORKING_STATUS] || 'Pending';
-
                 row.innerHTML = `
-                            <td class="fw-bold"><a href="#" class="text-primary crf-link" data-crf="${item.CRF_ID}">${item.CRF_ID}</a></td>
+                            <td class="fw-bold">${item.CRF_ID || 'N/A'}</td>
                             <td>${item.REQUEST_ID || 'N/A'}</td>
-                            <td class="text-wrap" style="max-width:300px;">${item.CRF_NAME}</td>
-                            <td>${item.RELEASE_DATE}</td>
-                            <td>${item.TECHLEAD_NAME}</td>
-                            <td>${item.DEVELOPER_NAME}</td>
-                            <td><strong>${item.TESTER_NAME}</strong></td>
-                            <td><span class="badge bg-info">${testerStatus}</span></td>
+                            <td class="text-wrap" style="max-width:300px;">${item.CRF_NAME || 'No CRF Name'}</td>
+                            <td>${item.RELEASE_DATE || 'N/A'}</td>
+                            <td>${item.TECHLEAD || 'N/A'}</td>
+                            <td>${item.DEVELOPER || 'N/A'}</td>
+                            <td><strong>${item.TESTER || 'N/A'}</strong></td>
+                            <td><span class="badge ${item.WORKING_STATUS == 1 ? 'bg-success' : 'bg-warning'}">${status}</span></td>
                             <td class="text-wrap small">${item.REMARKS || '-'}</td>
-                            <td>
-                                ${item.ATTACHMENT_NAME
-                        ? `<a href="/api/Verification/Attachment/${encodeURIComponent(item.CRF_ID)}/${encodeURIComponent(item.RELEASE_DATE)}" target="_blank">
-                                         <i class="fas fa-paperclip"></i> ${item.ATTACHMENT_NAME}
-                                       </a>`
-                        : '-'}
-                            </td>
-                            <td>
-                                <textarea class="form-control form-control-sm" rows="3" placeholder="Enter TL remarks...">${item.TL_REMARKS || ''}</textarea>
-                            </td>
+                            <td>${item.ATTACHMENT_NAME ? `<a href="/api/Verification/Attachment/${encodeURIComponent(item.CRF_ID || '')}/${encodeURIComponent(item.RELEASE_DATE || '')}" target="_blank">
+                                <i class="fas fa-paperclip"></i> ${item.ATTACHMENT_NAME}</a>` : '-'}</td>
+                            <td><textarea class="form-control form-control-sm" rows="3" placeholder="Enter TL remarks (required for Confirm)...">${item.TL_REMARKS || ''}</textarea></td>
                             <td class="text-center">
-                                <button class="btn btn-success btn-sm confirm-tl me-1" data-crf="${item.CRF_ID}" data-date="${item.RELEASE_DATE}">
-                                    <i class="fas fa-check"></i> Confirm
-                                </button>
-                                <button class="btn btn-warning btn-sm return-tl" data-crf="${item.CRF_ID}" data-date="${item.RELEASE_DATE}">
-                                    <i class="fas fa-undo"></i> Return
-                                </button>
+                                <button class="btn btn-success btn-sm confirm-tl me-1" data-crf="${item.CRF_ID || ''}" data-date="${item.RELEASE_DATE || ''}">Confirm</button>
+                                <button class="btn btn-warning btn-sm return-tl" data-crf="${item.CRF_ID || ''}" data-date="${item.RELEASE_DATE || ''}">Return</button>
+                                ${[2, 5].includes(item.VERIFY_STATUS) ? '' : `<button class="btn btn-danger btn-sm close-tl ms-1" data-crf="${item.CRF_ID || ''}" data-date="${item.RELEASE_DATE || ''}">Close</button>`}
                             </td>
                         `;
                 tbody.appendChild(row);
             });
 
-            // Attach events
-            document.querySelectorAll('.confirm-tl').forEach(btn => btn.addEventListener('click', () => tlAction(btn.dataset.crf, btn.dataset.date, 2)));
-            document.querySelectorAll('.return-tl').forEach(btn => btn.addEventListener('click', () => tlAction(btn.dataset.crf, btn.dataset.date, 3)));
-            document.querySelectorAll('.crf-link').forEach(link => link.addEventListener('click', e => {
-                e.preventDefault();
-                const item = tlData.find(x => x.CRF_ID === e.target.dataset.crf);
-                if (item?.HISTORY_JSON) showHistoryModal(JSON.parse(item.HISTORY_JSON || "[]"), item.CRF_ID);
-            }));
+            document.querySelectorAll('.confirm-tl').forEach(b => b.onclick = () => tlAction(b.dataset.crf, b.dataset.date, 'CONFIRM'));
+            document.querySelectorAll('.return-tl').forEach(b => b.onclick = () => tlAction(b.dataset.crf, b.dataset.date, 'RETURN'));
+            document.querySelectorAll('.close-tl').forEach(b => b.onclick = () => tlAction(b.dataset.crf, b.dataset.date, 'CLOSE'));
         }
 
-        async function tlAction(crfId, releaseDate, status) {
+        async function tlAction(crfId, releaseDate, action) {
             const row = event.target.closest('tr');
             const remarks = row.querySelector('textarea').value.trim();
 
-            if (status === 2 && !remarks) {
-                alert("TL Remarks are required to Confirm");
-                return;
-            }
+            if (action === 'CONFIRM' && !remarks) return alert("TL Remarks required for Confirm");
+            if (action === 'CLOSE' && !confirm("Mark as Live and Closed? This is final.")) return;
 
-            const payload = [{ crfId, releaseDate, tlRemarks: remarks, tlStatus: status }];
+            const payload = [{ crfId, releaseDate, tlRemarks: remarks, action }];
             const token = localStorage.getItem('jwtToken');
 
             try {
-                const res = await fetch('/api/Verification/TLSave', {
+                const res = await fetch('/api/Verification/tlsave', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                     body: JSON.stringify(payload)
                 });
 
                 if (res.ok) {
-                    alert(status === 2 ? "Confirmed successfully!" : "Returned to tester");
+                    alert(action === 'CONFIRM' ? "Confirmed!" : action === 'RETURN' ? "Returned" : "Closed");
                     document.getElementById('tlFilterForm').dispatchEvent(new Event('submit'));
                 } else {
                     alert("Failed: " + await res.text());
@@ -245,47 +255,6 @@
             }
         }
 
-        document.getElementById('tlExportExcel')?.addEventListener('click', () => {
-            if (tlData.length === 0) {
-                alert("No data to export");
-                return;
-            }
-
-            const exportData = tlData.map(item => ({
-                "CRF ID": item.CRF_ID,
-                "Request ID": item.REQUEST_ID || "N/A",
-                "CRF Name": item.CRF_NAME,
-                "Release Date": item.RELEASE_DATE,
-                "Tech Lead": item.TECHLEAD_NAME,
-                "Developer": item.DEVELOPER_NAME,
-                "Tester": item.TESTER_NAME,
-                "Tester Status": item.WORKING_STATUS ? ["", "Working", "Not Working", "In Progress", "Data need to capture", "User feedback pending"][item.WORKING_STATUS] : "",
-                "Tester Remarks": item.REMARKS || "",
-                "TL Remarks": item.TL_REMARKS || "",
-                "Status": item.VERIFY_STATUS === 2 ? "TL Confirmed" : item.VERIFY_STATUS === 3 ? "Returned" : "Pending TL Review"
-            }));
-
-            const ws = XLSX.utils.json_to_sheet(exportData);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "TL Verification");
-            ws['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 50 }, { wch: 15 }, { wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 40 }, { wch: 40 }, { wch: 20 }];
-
-            XLSX.writeFile(wb, `TL_Daily_Verification_${new Date().toISOString().slice(0, 10)}.xlsx`);
-        });
-
-        function showHistoryModal(history, crfId) {
-            alert(`History for CRF ${crfId}:\n${JSON.stringify(history, null, 2)}`);
-        }
-
-        document.addEventListener("DOMContentLoaded", () => {
-            loadMyTesters();
-
-            const today = new Date();
-            const from = new Date(today);
-            from.setDate(today.getDate() - 7);
-
-            document.getElementById('tlFromDate').valueAsDate = from;
-            document.getElementById('tlToDate').valueAsDate = today;
-        });
+        document.addEventListener("DOMContentLoaded", loadMyTesters);
     </script>
 }
