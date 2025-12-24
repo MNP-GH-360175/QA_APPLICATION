@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\QA_APPLICATION\QA.API\QA.API\QA.API.csproj" />
+    <ProjectReference Include="..\..\..\QA_APPLICATION\QA_API\QA.API\QA.API.csproj" />
   </ItemGroup>
 
 </Project>
