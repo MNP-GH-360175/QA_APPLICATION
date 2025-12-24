@@ -5,11 +5,11 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services
+// Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// Swagger with JWT Authentication Support
+// Swagger with JWT support
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -19,14 +19,11 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Quality Assurance Department API"
     });
 
-    // === JWT Bearer Authentication for Swagger ===
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = @"
-            JWT Authorization header using the Bearer scheme. 
-            Enter 'Bearer' [space] and then your token in the text input below.
-            Example: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxxxxxx.yyyyyyy'
-        ".Trim(),
+        Description = @"JWT Authorization header using the Bearer scheme. 
+                        Enter 'Bearer' [space] and then your token.
+                        Example: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxxxxxx.yyyyyyy'",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey,
@@ -43,18 +40,14 @@ builder.Services.AddSwaggerGen(c =>
                 {
                     Type = ReferenceType.SecurityScheme,
                     Id = "Bearer"
-                },
-                Scheme = "bearer",
-                Name = "Bearer",
-                In = ParameterLocation.Header
+                }
             },
             new List<string>()
         }
     });
-    // === End of JWT Block ===
 });
 
-// JWT Authentication Configuration
+// JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
 var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 
@@ -74,33 +67,35 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-
 builder.Services.AddAuthorization();
 
-var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
+// CORS - Must be added BEFORE building the app
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowWebApp", policy =>
     {
-        policy.WithOrigins("https://localhost:7244")
+        policy.WithOrigins("https://localhost:7244")  // Your WebApplication10 URL
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
     });
 });
 
-app.UseCors("AllowWebApp");
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
 app.UseHttpsRedirection();
 
-app.UseAuthentication();  // Must be before UseAuthorization
-app.UseAuthorization();
+// Middleware order is CRITICAL
+app.UseCors("AllowWebApp");        // CORS
+app.UseAuthentication();           // Authenticati
+app.UseAuthorization();            // Authorization
 
 app.MapControllers();
 
