@@ -17,13 +17,12 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader());
 });
 
-// === JWT Setup - Symmetric Key (HS256) ===
+// === JWT Setup ===
 var jwtSettings = builder.Configuration.GetSection("Jwt");
 var keyBytes = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 
-// Create singleton key with kid
 var signingKey = new SymmetricSecurityKey(keyBytes);
-signingKey.KeyId = "1"; // Important: adds kid="1" to token header
+signingKey.KeyId = "1";
 
 builder.Services.AddSingleton(signingKey);
 
@@ -43,11 +42,9 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = signingKey, // ← Only this — no Configuration!
+        IssuerSigningKey = signingKey,
         ClockSkew = TimeSpan.FromMinutes(5)
     };
-
-    // No options.Configuration, no options.Authority, no JWKS loading
 
     options.Events = new JwtBearerEvents
     {
@@ -63,7 +60,8 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
-// Middleware
+app.UsePathBase("/QA_APPLICATION");  
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -72,13 +70,16 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+
 app.UseRouting();
 
 app.UseCors("AllowAll");
-app.UseAuthentication();  // Must be before UseAuthorization
+
+app.UseAuthentication();  
 app.UseAuthorization();
 
 app.MapControllers();
+
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Login}/{id?}");

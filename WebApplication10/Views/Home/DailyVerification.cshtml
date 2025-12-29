@@ -1,7 +1,46 @@
 ﻿@{
     ViewData["Title"] = "Daily Release Verification";
     Layout = "~/Views/Shared/_DashboardLayout.cshtml";
+
+    string currentUserName = "Unknown";
+    try
+    {
+        var token = Context.Request.Cookies["jwtToken"] ??
+                    Context.Request.Headers["Authorization"].ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(token))
+        {
+            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(token);
+            currentUserName = jwtToken.Claims
+                .FirstOrDefault(c => c.Type == "given_name" || c.Type == "name" || c.Type == "unique_name")?.Value
+                ?? "Unknown";
+        }
+    }
+    catch { }
+
+    var techLeads = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "JIJIN E H", "MURUGESAN P", "NIKHIL SEKHAR", "SMINA BENNY", "VISAGH S", "JOBY JOSE"
+    };
+
+    bool isTechLead = techLeads.Contains(currentUserName.Trim());
 }
+
+@if (isTechLead)
+{
+    <div class="container-fluid mt-5">
+        <div class="alert alert-warning text-center py-5">
+            <h4><i class="fas fa-exclamation-triangle me-2"></i> Restricted Access</h4>
+            <p>This page is for testers only.</p>
+            <a href="@Url.Action("DailyVerificationTL", "Home")" class="btn btn-primary mt-3">
+                <i class="fas fa-arrow-right me-2"></i> Go to Tech Lead Verification Page
+            </a>
+        </div>
+    </div>
+}
+else
+
+{
 <div class="container-fluid mt-4 px-2 px-md-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3 class="mb-0 text-primary fw-bold">
@@ -111,23 +150,29 @@
                 </table>
             </div>
             <!-- Empty State -->
-            <div class="text-center py-5 text-muted" id="emptyState" style="display:none;">
-                No records found
-                <h5>No records found</h5>
-                <p>Try adjusting your filters</p>
-            </div>
+                <div class="text-center py-5 text-muted" id="emptyState" style="display:none;">
+                    <i class="fas fa-search fa-3x mb-4 text-muted opacity-50"></i>
+                    <h4 class="text-muted">No Records Found</h4>
+                    <p class="lead">No verifications match your selected filters.</p>
+                    <p>Try adjusting the date range or release type.</p>
+                </div>
         </div>
     </div>
 </div>
 
-@section Scripts {
+    @section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
+        const API_BASE = '/QA_APPLICATION/api';
+
         const STATUS_OPTIONS = ["Working", "Not Working", "In Progress", "Data need to capture", "User feedback pending"];
         const STATUS_MAP = { 1: "Working", 2: "Not Working", 3: "In Progress", 4: "Data need to capture", 5: "User feedback pending" };
+
         let verificationData = [];
         let filteredData = [];
         const pageSize = 10;
         let currentPage = 1;
+
         const normalizeKeys = obj => new Proxy(obj, {
             get(target, prop) {
                 if (prop in target) return target[prop];
@@ -136,30 +181,32 @@
                 return found ? target[found] : undefined;
             }
         });
+
         async function loadFilterDropdowns() {
             try {
                 const token = localStorage.getItem('jwtToken');
                 if (!token) return;
-                // Get current logged-in user name from JWT
+
                 let currentUserName = "Unknown";
                 try {
                     const payload = JSON.parse(atob(token.split('.')[1]));
                     currentUserName = payload.given_name || payload.name || payload.unique_name || "Unknown";
-                } catch (e) {
-                    console.error("Failed to parse JWT", e);
-                }
-                const res = await fetch('/api/Verification/filters', {
+                } catch (e) { console.error("Failed to parse JWT", e); }
+
+                const res = await fetch(`${API_BASE}/Verification/filters`, {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 if (!res.ok) throw new Error("Failed to load filters");
                 const data = await res.json();
+
                 const tlSelect = document.getElementById("testerTL");
                 const testerSelect = document.getElementById("testerName");
                 tlSelect.innerHTML = '<option value="">My TL</option>';
                 testerSelect.innerHTML = '<option value="">My Name</option>';
+
                 let userFound = false;
                 for (const tl of data.testerTLs || []) {
-                    const testersRes = await fetch(`/api/Verification/testers/${encodeURIComponent(tl.value)}`, {
+                    const testersRes = await fetch(`${API_BASE}/Verification/testers/${encodeURIComponent(tl.value)}`, {
                         headers: { 'Authorization': 'Bearer ' + token }
                     });
                     if (testersRes.ok) {
@@ -181,6 +228,7 @@
                         }
                     }
                 }
+
                 if (!userFound) {
                     tlSelect.innerHTML = '<option value="">All TLs</option>';
                     data.testerTLs?.forEach(x => tlSelect.add(new Option(x.text, x.value)));
@@ -196,12 +244,14 @@
                 showToast("Failed to load your team info", "danger");
             }
         }
+
         function formatDateForOracle(dateStr) {
             if (!dateStr) return "";
             const d = new Date(dateStr);
             const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
             return `${String(d.getDate()).padStart(2, '0')}-${months[d.getMonth()]}-${d.getFullYear()}`;
         }
+
         document.getElementById("filterForm").addEventListener("submit", async e => {
             e.preventDefault();
             let valid = true;
@@ -214,12 +264,14 @@
                 }
             });
             if (!valid) return;
+
             let currentUserName = "Unknown";
             try {
                 const token = localStorage.getItem('jwtToken');
                 const payload = JSON.parse(atob(token.split('.')[1]));
                 currentUserName = payload.given_name || payload.name || payload.unique_name || "Unknown";
             } catch { }
+
             const payload = {
                 fromDate: formatDateForOracle(document.getElementById("fromDate").value),
                 toDate: formatDateForOracle(document.getElementById("toDate").value),
@@ -227,17 +279,19 @@
                 testerTL: null,
                 testerName: currentUserName
             };
+
             const token = localStorage.getItem('jwtToken');
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = 'Searching...';
             try {
-                const res = await fetch('/api/Verification', {
+                const res = await fetch(`${API_BASE}/Verification`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                     body: JSON.stringify(payload)
                 });
                 if (!res.ok) throw new Error(await res.text());
+
                 const rawData = await res.json();
                 verificationData = rawData.map(item => normalizeKeys(item));
                 verificationData.forEach(item => {
@@ -249,33 +303,47 @@
                     item.developer = item.DEVELOPER_NAME || "Not Assigned";
                     item.tester = item.TESTER_NAME ? item.TESTER_NAME.replace(/,/g, ', ') : "Not Assigned";
                     item.releaseTypeText = item.RELEASE_TYPE || "";
+
                     const statusCode = item.WORKING_STATUS ? Number(item.WORKING_STATUS) : null;
-                    const verifiedToday = item.VERIFIED_ON && new Date().toDateString() === new Date(item.VERIFIED_ON).toDateString();
-                    if (verifiedToday && statusCode) {
+                    const verifyStatus = item.VERIFY_STATUS ? Number(item.VERIFY_STATUS) : null;
+                    const isReturnedByTL = verifyStatus === 3;
+                    const isConfirmedByTL = verifyStatus === 2 || verifyStatus === 5;
+
+                    if (isReturnedByTL) {
+                        item.workingStatus = statusCode ? STATUS_MAP[statusCode] : "";
+                        item.remarks = item.REMARKS || "";
+                        item.tlRemarks = item.TL_REMARKS || "";
+                        item.attachmentName = item.ATTACHMENT_NAME || "";
+                        item.isConfirmed = false;
+                    } else if (isConfirmedByTL && statusCode) {
                         item.workingStatus = STATUS_MAP[statusCode] || "";
                         item.remarks = item.REMARKS || "";
+                        item.tlRemarks = item.TL_REMARKS || "";
                         item.attachmentName = item.ATTACHMENT_NAME || "";
                         item.isConfirmed = true;
                     } else {
                         item.workingStatus = "";
                         item.remarks = "";
+                        item.tlRemarks = item.TL_REMARKS || "";
                         item.attachmentName = "";
                         item.isConfirmed = false;
                     }
-                    try {
-                        item.History = JSON.parse(item.HISTORY_JSON || "[]");
-                    } catch {
-                        item.History = [];
-                    }
+                    try { item.History = JSON.parse(item.HISTORY_JSON || "[]"); } catch { item.History = []; }
                 });
+
                 filteredData = [...verificationData];
                 currentPage = 1;
                 updateTableAndPagination();
-                document.getElementById("resultCard").style.display = verificationData.length > 0 ? "block" : "none";
+                document.getElementById("resultCard").style.display = "block";
             } catch (err) {
                 alert("Error: " + err.message);
+                document.getElementById("resultCard").style.display = "none";
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Search';
             }
         });
+
         function updateTableAndPagination() {
             document.getElementById("totalRecords").textContent = filteredData.length;
             const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
@@ -285,139 +353,368 @@
             document.getElementById("nextPage").parentElement.classList.toggle("disabled", currentPage === totalPages);
             renderTable();
         }
+
         function renderTable() {
             const tbody = document.getElementById("verificationBody");
             tbody.innerHTML = "";
+
             const start = (currentPage - 1) * pageSize;
             const end = start + pageSize;
             const pageData = filteredData.slice(start, end);
+
             if (filteredData.length === 0) {
                 document.getElementById("emptyState").style.display = "block";
                 return;
             }
             document.getElementById("emptyState").style.display = "none";
+
             pageData.forEach((item, idx) => {
                 const globalIdx = filteredData.indexOf(item);
                 const isDaily = item.releaseTypeText.includes("Daily");
                 const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
                 const badgeText = isDaily ? "Daily" : "Exp.";
                 const canConfirm = item.workingStatus && (item.remarks || "").trim().length > 0;
+
                 const row = document.createElement("tr");
                 row.innerHTML = `
-                                        <td class="ps-4"><a href="#" class="text-decoration-none fw-bold text-primary crf-link" data-idx="${globalIdx}">${item.crfId}</a></td>
-                                        <td><span class="badge bg-secondary fs-7">${item.requestId || 'N/A'}</span></td>
-                                        <td><span class="badge ${badgeCls} fs-7">${badgeText}</span></td>
-                                        <td class="text-wrap" title="${item.subject}">${item.subject.length > 50 ? item.subject.substring(0, 47) + '...' : item.subject}</td>
-                                        <td>${item.releaseDate}</td>
-                                        <td><strong>${item.techlead}</strong></td>
-                                        <td>${item.developer}</td>
-                                        <td><strong>${item.tester}</strong></td>
-                                        <td class="text-center align-middle">
-                                            ${item.isConfirmed
+                            <td class="ps-4">
+                                <a href="#" class="text-decoration-none fw-bold text-primary crf-link" data-idx="${globalIdx}">
+                                    ${item.crfId}
+                                </a>
+                            </td>
+                            <td><span class="badge bg-secondary fs-7">${item.requestId || 'N/A'}</span></td>
+                            <td><span class="badge ${badgeCls} fs-7">${badgeText}</span></td>
+                            <td class="text-wrap" title="${item.subject}">
+                                ${item.subject.length > 50 ? item.subject.substring(0, 47) + '...' : item.subject}
+                            </td>
+                            <td>${item.releaseDate}</td>
+                            <td><strong>${item.techlead}</strong></td>
+                            <td>${item.developer}</td>
+                            <td><strong>${item.tester}</strong></td>
+
+                            <td class="text-center align-middle">
+                                ${item.isConfirmed
                         ? `<span class="badge bg-success px-3 py-2 fs-7">${item.workingStatus}</span>
-                                                   <button class="btn btn-sm btn-outline-warning ms-2 edit-btn" data-idx="${globalIdx}">Edit</button>`
+                                       <button class="btn btn-sm btn-outline-warning ms-2 edit-btn" data-idx="${globalIdx}">Edit</button>`
                         : `<select class="form-select form-select-sm status-select" data-idx="${globalIdx}">
-                                                      <option value="">-- Select --</option>
-                                                      ${STATUS_OPTIONS.map(opt => `<option value="${opt}" ${item.workingStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
-                                                   </select>`
+                                          <option value="">-- Select --</option>
+                                          ${STATUS_OPTIONS.map(opt =>
+                            `<option value="${opt}" ${item.workingStatus === opt ? 'selected' : ''}>${opt}</option>`
+                        ).join('')}
+                                       </select>`
                     }
-                                        </td>
-                                        <td class="align-middle">
-                                            <textarea class="form-control form-control-sm remarks-text w-100" rows="2" data-idx="${globalIdx}" ${item.isConfirmed ? 'readonly' : ''}>${item.remarks || ''}</textarea>
-                                            <small class="text-muted word-count">${(item.remarks || '').trim().split(/\s+/).filter(Boolean).length} words</small>
-                                        </td>
-                                        <td class="align-middle text-center">
-                                            ${!item.isConfirmed
+                            </td>
+
+                            <td class="align-middle">
+                                ${item.tlRemarks ? `
+                                    <div class="alert alert-warning small py-2 mb-3 border-start border-warning border-4" role="alert">
+                                        <strong class="d-block mb-1">
+                                            <i class="fas fa-exclamation-triangle me-1"></i> TL Return Remarks:
+                                        </strong>
+                                        <div class="ms-3">
+                                            ${item.tlRemarks.replace(/\n/g, '<br>')}
+                                        </div>
+                                    </div>
+                                ` : ''}
+
+                                <textarea class="form-control form-control-sm remarks-text w-100"
+                                          rows="3"
+                                          data-idx="${globalIdx}"
+                                          ${item.isConfirmed ? 'readonly' : ''}
+                                          placeholder="${item.isConfirmed ? '' : 'Enter your remarks here...'}">
+        ${item.remarks || ''}
+                                </textarea>
+
+                                ${item.tlRemarks && !item.isConfirmed ? `
+                                    <small class="text-danger d-block mt-1">
+                                        <i class="fas fa-info-circle me-1"></i> Please address the TL remarks above and resubmit.
+                                    </small>
+                                ` : ''}
+
+                                <small class="text-muted d-block mt-1 word-count" data-idx="${globalIdx}">
+                                    ${(item.remarks || '').trim().split(/\s+/).filter(w => w.length > 0).length} words
+                                </small>
+                            </td>
+
+                            <td class="align-middle text-center">
+                                ${!item.isConfirmed
                         ? `<input type="file" class="form-control form-control-sm file-input" data-idx="${globalIdx}" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">`
                         : (item.attachmentName
-                            ? `<a href="/api/Verification/Attachment/${encodeURIComponent(item.crfId)}/${encodeURIComponent(item.releaseDate)}"
-                                         target="_blank"
-                                         class="btn btn-sm btn-outline-primary">
-                                         <i class="fas fa-paperclip me-1"></i>${item.attachmentName
-                                         }
-                                       </a>`
+                            ? `<a href="${API_BASE}/api/Verification/Attachment/${encodeURIComponent(item.crfId)}/${encodeURIComponent(item.releaseDate)}"
+                                             target="_blank"
+                                             class="btn btn-sm btn-outline-primary">
+                                             <i class="fas fa-paperclip me-1"></i> ${item.attachmentName}
+                                           </a>`
                             : '-')
                     }
-                                        </td>
-                                        <td class="text-center align-middle">
-                                            <button class="btn ${item.isConfirmed ? 'btn-success' : (canConfirm ? 'btn-primary' : 'btn-secondary')} btn-sm px-4 confirm-btn"
-                                                    data-idx="${globalIdx}" ${item.isConfirmed || !canConfirm ? 'disabled' : ''}>
-                                                ${item.isConfirmed ? 'Confirmed' : 'Confirm'}
-                                            </button>
-                                        </td>
-                                    `;
+                            </td>
+
+                            <td class="text-center align-middle">
+                                <button class="btn ${item.isConfirmed ? 'btn-success' : (canConfirm ? 'btn-primary' : 'btn-secondary')}
+                                        btn-sm px-4 confirm-btn"
+                                        data-idx="${globalIdx}"
+                                        ${item.isConfirmed || !canConfirm ? 'disabled' : ''}>
+                                    ${item.isConfirmed ? 'Confirmed' : 'Confirm'}
+                                </button>
+                            </td>
+                        `;
                 tbody.appendChild(row);
             });
+
             attachEvents();
         }
+
         function attachEvents() {
             document.querySelectorAll(".status-select").forEach(sel => {
                 sel.addEventListener("change", e => {
                     const idx = e.target.dataset.idx;
                     verificationData[idx].workingStatus = e.target.value;
-                    filteredData = [...verificationData];
                     updateConfirmButton(idx);
                 });
             });
+
             document.querySelectorAll(".remarks-text").forEach(ta => {
                 ta.addEventListener("input", e => {
                     const idx = e.target.dataset.idx;
                     verificationData[idx].remarks = e.target.value;
-                    filteredData = [...verificationData];
-                    const words = e.target.value.trim().split(/\s+/).filter(w => w).length;
-                    e.target.nextElementSibling.textContent = words + " words";
+                    const words = e.target.value.trim().split(/\s+/).filter(w => w.length > 0).length;
+                    const wordCountEl = ta.parentElement.querySelector(".word-count");
+                    if (wordCountEl) wordCountEl.textContent = words + " words";
                     updateConfirmButton(idx);
                 });
             });
+
             document.querySelectorAll(".confirm-btn").forEach(btn => {
                 btn.addEventListener("click", e => {
-                    const idx = e.target.closest("button").dataset.idx;
+                    const idx = e.target.dataset.idx;
                     saveItem(verificationData[idx]);
                 });
             });
+
             document.querySelectorAll(".edit-btn").forEach(btn => {
                 btn.addEventListener("click", e => {
                     const idx = e.target.dataset.idx;
                     verificationData[idx].isConfirmed = false;
-                    filteredData = [...verificationData];
                     renderTable();
                 });
             });
+
             document.querySelectorAll(".crf-link").forEach(link => {
                 link.addEventListener("click", e => {
                     e.preventDefault();
-                    const idx = e.target.dataset.idx;
+                    const idx = parseInt(e.target.dataset.idx);
                     const item = verificationData[idx];
-                    showHistoryModal(item.History, item.crfId, item.releaseDate, item.releaseTypeText);
+                    if (item) {
+                        showHistoryModal(item.History || [], item.crfId, item.releaseDate, item.releaseTypeText);
+                    }
                 });
             });
         }
+
+        // NEW BEAUTIFUL PLANT-STYLE HISTORY MODAL
+        // function showHistoryModal(historyJson, crfId, releaseDate, releaseTypeText) {
+        //     let entries = [];
+
+        //     // Parse historical data from DB
+        //     let history = [];
+        //     try { history = JSON.parse(historyJson || "[]"); } catch { history = []; }
+
+        //     // Add current (latest) tester verification at the top
+        //     const currentItem = verificationData.find(i => i.crfId === crfId && i.releaseDate === releaseDate);
+        //     if (currentItem) {
+        //         const initials = (currentItem.tester || "??")
+        //             .trim()
+        //             .split(' ')
+        //             .map(n => n[0].toUpperCase())
+        //             .join('')
+        //             .substring(0, 2);
+
+        //         const statusColor = currentItem.workingStatus === "Working" ? "success" :
+        //             currentItem.workingStatus === "Not Working" ? "danger" :
+        //                 currentItem.workingStatus === "In Progress" ? "warning" :
+        //                     currentItem.workingStatus === "Data need to capture" ? "info" :
+        //                         "secondary";
+
+        //         entries.push({
+        //             initials,
+        //             by: currentItem.tester || "Unknown Tester",
+        //             on: currentItem.testerVerifiedOn || "Current Verification",
+        //             status: currentItem.workingStatus || "Pending",
+        //             remarks: currentItem.remarks || "No remarks provided",
+        //             attachment: currentItem.attachmentName,
+        //             color: statusColor,
+        //             isCurrent: true
+        //         });
+        //     }
+
+        //     // Add TL actions and past tester verifications
+        //     history.forEach(h => {
+        //         let initials = "??";
+        //         let by = "Unknown";
+        //         let on = h.changed_on || "Unknown Date";
+        //         let status = "Updated";
+        //         let remarks = h.old_remarks || "No remarks";
+        //         let attachment = h.old_attachment_filename;
+        //         let color = "primary";
+
+        //         if (h.change_reason && h.change_reason.includes("TL Action")) {
+        //             by = h.changed_by || "Tech Lead";
+        //             initials = by.trim().split(' ').map(n => n[0].toUpperCase()).join('').substring(0, 2);
+        //             const action = h.change_reason.includes("CONFIRM") ? "Confirmed" :
+        //                 h.change_reason.includes("RETURN") ? "Returned to Tester" : "TL Action";
+        //             status = action;
+        //             remarks = h.tl_remarks || remarks;
+        //             color = action === "Confirmed" ? "success" : "danger";
+        //         } else {
+        //             by = h.changed_by || currentItem?.tester || "Tester";
+        //             initials = by.trim().split(' ').map(n => n[0].toUpperCase()).join('').substring(0, 2);
+        //             status = STATUS_MAP[h.old_working_status] || "Updated";
+        //             color = status === "Working" ? "success" :
+        //                 status === "Not Working" ? "danger" :
+        //                     status === "In Progress" ? "warning" :
+        //                         status === "Data need to capture" ? "info" : "secondary";
+        //         }
+
+        //         entries.push({ initials, by, on, status, remarks, attachment, color });
+        //     });
+
+        //     // Sort: current first, then newest to oldest
+        //     entries.sort((a, b) => {
+        //         if (a.isCurrent) return -1;
+        //         if (b.isCurrent) return 1;
+        //         return new Date(b.on) - new Date(a.on);
+        //     });
+
+        //     // Build timeline HTML
+        //     let timelineHtml = `<div class="position-relative mx-auto" style="max-width: 900px;">`;
+        //     timelineHtml += `<div class="position-absolute top-0 bottom-0 start-50 bg-success opacity-20" style="width: 5px; z-index: 1;"></div>`;
+
+        //     if (entries.length === 0) {
+        //         timelineHtml += `<p class="text-center text-muted py-5">No verification history available</p>`;
+        //     } else {
+        //         entries.forEach((entry, index) => {
+        //             const isLeft = index % 2 === 0;
+        //             const offset = isLeft ? "offset-6" : "";
+        //             const justify = isLeft ? "start" : "end";
+        //             const connectorSide = isLeft ? "end-50" : "start-50";
+
+        //             timelineHtml += `
+        //             <div class="row position-relative mb-5">
+        //                 <!-- Horizontal connector -->
+        //                 <div class="position-absolute top-50 ${connectorSide} translate-middle-y bg-success opacity-40"
+        //                      style="width: 50%; height: 4px; z-index: 2;"></div>
+
+        //                 <!-- Center dot with initials -->
+        //                 <div class="position-absolute top-50 start-50 translate-middle" style="z-index: 10;">
+        //                     <div class="rounded-circle bg-white shadow-lg" style="width: 44px; height: 44px; border: 6px solid white;">
+        //                         <div class="rounded-circle bg-${entry.color} text-white d-flex align-items-center justify-content-center fw-bold h-100 w-100" style="font-size: 1.1rem;">
+        //                             ${entry.initials}
+        //                         </div>
+        //                     </div>
+        //                 </div>
+
+        //                 <!-- Card on left or right -->
+        //                 <div class="col-6 ${offset}">
+        //                     <div class="card border-0 shadow rounded-4 h-100">
+        //                         <div class="card-body p-4">
+        //                             <div class="d-flex align-items-center gap-3 mb-3">
+        //                                 <div class="rounded-circle bg-${entry.color} text-white d-flex align-items-center justify-content-center fw-bold flex-shrink-0"
+        //                                      style="width: 60px; height: 60px; font-size: 1.3rem;">
+        //                                     ${entry.initials}
+        //                                 </div>
+        //                                 <div class="flex-grow-1">
+        //                                     <h6 class="mb-1 fw-bold">${entry.by}</h6>
+        //                                     <small class="text-muted">${entry.on}</small>
+        //                                 </div>
+        //                                 <span class="badge bg-${entry.color} px-4 py-2 fs-6">${entry.status}</span>
+        //                             </div>
+
+        //                             ${entry.remarks ? `
+        //                             <div class="p-3 bg-light rounded-3 small border-start border-${entry.color} border-5">
+        //                                 ${entry.remarks.replace(/\n/g, '<br>')}
+        //                             </div>` : '<em class="text-muted small">No remarks</em>'}
+
+        //                             ${entry.attachment ? `
+        //                             <div class="mt-3">
+        //                                 <a href="${API_BASE}/api/Verification/Attachment/${encodeURIComponent(crfId)}/${encodeURIComponent(releaseDate)}"
+        //                                    target="_blank" class="btn btn-sm btn-outline-info">
+        //                                     <i class="fas fa-paperclip me-2"></i>${entry.attachment}
+        //                                 </a>
+        //                             </div>` : ''}
+        //                         </div>
+        //                     </div>
+        //                 </div>
+        //             </div>`;
+        //         });
+        //     }
+
+        //     timelineHtml += `</div>`;
+
+        //     // Modal header badge
+        //     const isDaily = releaseTypeText?.includes("Daily");
+        //     const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
+        //     const badgeText = isDaily ? "Daily" : "Exp.";
+
+        //     const modalHtml = `
+        //     <div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel" aria-hidden="true">
+        //         <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        //             <div class="modal-content border-0 shadow-lg">
+        //                 <div class="modal-header bg-gradient bg-primary text-white">
+        //                     <h5 class="modal-title fw-bold">
+        //                         Verification Workflow: <strong>${crfId}</strong>
+        //                         <span class="badge ${badgeCls} ms-3 px-3 py-2">${badgeText}</span>
+        //                     </h5>
+        //                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        //                 </div>
+        //                 <div class="modal-body py-5 bg-light">
+        //                     ${timelineHtml}
+        //                 </div>
+        //                 <div class="modal-footer border-0 bg-light">
+        //                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        //                 </div>
+        //             </div>
+        //         </div>
+        //     </div>`;
+
+        //     // Remove old modal if exists
+        //     document.getElementById('historyModal')?.remove();
+        //     document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        //     // Show modal
+        //     const modal = new bootstrap.Modal(document.getElementById('historyModal'));
+        //     modal.show();
+        // }
+        
+
         function updateConfirmButton(idx) {
             const item = verificationData[idx];
-            const can = item.workingStatus && (item.remarks || "").trim();
+            const can = item.workingStatus && (item.remarks || "").trim().length > 0;
             const btn = document.querySelector(`.confirm-btn[data-idx="${idx}"]`);
             if (btn) {
                 btn.disabled = item.isConfirmed || !can;
-                btn.className = `btn btn-sm px-4 ${item.isConfirmed ? 'btn-success' : (can ? 'btn-primary' : 'btn-secondary')} confirm-btn`;
-                btn.innerHTML = item.isConfirmed ? 'Confirmed' : 'Confirm';
+                btn.className = `btn btn-sm px-4 confirm-btn ${item.isConfirmed ? 'btn-success' : (can ? 'btn-primary' : 'btn-secondary')}`;
+                btn.textContent = item.isConfirmed ? 'Confirmed' : 'Confirm';
             }
         }
+
+        // Pagination
         document.getElementById("prevPage").addEventListener("click", e => {
             e.preventDefault();
             if (currentPage > 1) {
                 currentPage--;
-                renderTable();
                 updateTableAndPagination();
             }
         });
+
         document.getElementById("nextPage").addEventListener("click", e => {
             e.preventDefault();
             if (currentPage < Math.ceil(filteredData.length / pageSize)) {
                 currentPage++;
-                renderTable();
                 updateTableAndPagination();
             }
         });
+
+        // Search
         document.getElementById("tableSearch").addEventListener("input", e => {
             const query = e.target.value.toLowerCase();
             filteredData = verificationData.filter(item =>
@@ -427,6 +724,8 @@
             currentPage = 1;
             updateTableAndPagination();
         });
+
+        // Export to Excel
         document.getElementById("exportExcelBtn").addEventListener("click", () => {
             if (filteredData.length === 0) {
                 alert("No data to export!");
@@ -448,15 +747,12 @@
             const ws = XLSX.utils.json_to_sheet(dataToExport);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Verification Data");
-            const colWidths = [
-                { wch: 12 }, { wch: 15 }, { wch: 8 }, { wch: 50 },
-                { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
-                { wch: 20 }, { wch: 40 }, { wch: 25 }
-            ];
-            ws['!cols'] = colWidths;
+            ws['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 8 }, { wch: 50 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 40 }, { wch: 25 }];
             const today = new Date().toISOString().slice(0, 10);
             XLSX.writeFile(wb, `Daily_Release_Verification_${today}.xlsx`);
         });
+
+        // Save item
         async function saveItem(item) {
             if (!item.workingStatus) {
                 showToast("Please select a Status", "danger");
@@ -486,7 +782,7 @@
             }];
             const token = localStorage.getItem('jwtToken');
             try {
-                const res = await fetch('/api/Verification/Save', {
+                const res = await fetch(`${API_BASE}/Verification/Save`, {  
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -496,21 +792,20 @@
                 });
                 if (res.ok) {
                     showToast("Saved successfully!", "success");
+                    // Refresh data
                     const currentFilters = {
                         fromDate: document.getElementById("fromDate").value,
                         toDate: document.getElementById("toDate").value,
-                        releaseType: document.getElementById("releaseType").value || null,
-                        testerTL: document.getElementById("testerTL").value || null,
-                        testerName: document.getElementById("testerName").value || null
+                        releaseType: document.getElementById("releaseType").value || null
                     };
                     const formattedPayload = {
                         fromDate: formatDateForOracle(currentFilters.fromDate),
                         toDate: formatDateForOracle(currentFilters.toDate),
                         releaseType: currentFilters.releaseType,
-                        testerTL: currentFilters.testerTL,
-                        testerName: currentFilters.testerName
+                        testerTL: null,
+                        testerName: localStorage.getItem('jwtToken') ? JSON.parse(atob(localStorage.getItem('jwtToken').split('.')[1])).given_name || "Unknown" : "Unknown"
                     };
-                    const refreshRes = await fetch('/api/Verification', {
+                    const refreshRes = await fetch(`${API_BASE}/Verification`, {  
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -518,36 +813,47 @@
                         },
                         body: JSON.stringify(formattedPayload)
                     });
+
                     if (refreshRes.ok) {
                         const rawData = await refreshRes.json();
                         verificationData = rawData.map(item => normalizeKeys(item));
                         verificationData.forEach(item => {
+                            // Apply same logic as initial load
+                            const statusCode = item.WORKING_STATUS ? Number(item.WORKING_STATUS) : null;
+                            const verifyStatus = item.VERIFY_STATUS ? Number(item.VERIFY_STATUS) : null;
+                            const isReturnedByTL = verifyStatus === 3;
+                            const isConfirmedByTL = verifyStatus === 2 || verifyStatus === 5;
+
                             item.crfId = item.CRF_ID || "N/A";
                             item.requestId = item.REQUEST_ID || "";
                             item.subject = item.CRF_NAME || "Unknown CRF";
                             item.releaseDate = item.RELEASE_DATE || "";
-                            item.techlead = item.TECHLEAD_NAME || "";
-                            item.developer = item.DEVELOPER_NAME || "";
-                            item.tester = item.TESTER_NAME || "";
+                            item.techlead = item.TECHLEAD_NAME || "Not Assigned";
+                            item.developer = item.DEVELOPER_NAME || "Not Assigned";
+                            item.tester = item.TESTER_NAME ? item.TESTER_NAME.replace(/,/g, ', ') : "Not Assigned";
                             item.releaseTypeText = item.RELEASE_TYPE || "";
-                            const statusCode = item.WORKING_STATUS ? Number(item.WORKING_STATUS) : null;
-                            const verifiedToday = item.VERIFIED_ON && new Date().toDateString() === new Date(item.VERIFIED_ON).toDateString();
-                            if (verifiedToday && statusCode) {
+
+                            if (isReturnedByTL) {
+                                item.workingStatus = statusCode ? STATUS_MAP[statusCode] : "";
+                                item.remarks = item.REMARKS || "";
+                                item.tlRemarks = item.TL_REMARKS || "";
+                                item.attachmentName = item.ATTACHMENT_NAME || "";
+                                item.isConfirmed = false;
+                            } else if (isConfirmedByTL && statusCode) {
                                 item.workingStatus = STATUS_MAP[statusCode] || "";
                                 item.remarks = item.REMARKS || "";
+                                item.tlRemarks = item.TL_REMARKS || "";
                                 item.attachmentName = item.ATTACHMENT_NAME || "";
                                 item.isConfirmed = true;
                             } else {
                                 item.workingStatus = "";
                                 item.remarks = "";
+                                item.tlRemarks = item.TL_REMARKS || "";
                                 item.attachmentName = "";
                                 item.isConfirmed = false;
                             }
-                            try {
-                                item.History = JSON.parse(item.HISTORY_JSON || "[]");
-                            } catch {
-                                item.History = [];
-                            }
+
+                            try { item.History = JSON.parse(item.HISTORY_JSON || "[]"); } catch { item.History = []; }
                         });
                         filteredData = [...verificationData];
                         currentPage = 1;
@@ -561,19 +867,21 @@
                 showToast("Error: " + err.message, "danger");
             }
         }
+
         function showToast(message, type = "success") {
             const toast = document.createElement("div");
             toast.className = `toast align-items-center text-white bg-${type} border-0 position-fixed bottom-0 end-0 m-3`;
             toast.style.zIndex = 9999;
             toast.innerHTML = `
-                                <div class="d-flex">
-                                    <div class="toast-body">${message}</div>
-                                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                                </div>`;
+                        <div class="d-flex">
+                            <div class="toast-body">${message}</div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                        </div>`;
             document.body.appendChild(toast);
             new bootstrap.Toast(toast).show();
             setTimeout(() => toast.remove(), 3000);
         }
+
         function fileToBase64(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -582,6 +890,7 @@
                 reader.readAsDataURL(file);
             });
         }
+
         function showHistoryModal(history, crfId, releaseDate, type) {
             const isDaily = type?.includes("Daily");
             const badgeCls = isDaily ? "bg-primary" : "bg-warning text-dark";
@@ -600,57 +909,57 @@
                                     h.status_text === 'Data need to capture' ? 'bg-info' :
                                         h.status_text === 'User feedback pending' ? 'bg-secondary' : 'bg-primary';
                     return `
-                                        <div class="d-flex gap-4 py-4 ${index < history.length - 1 ? 'border-bottom' : ''}">
-                                            <div class="flex-shrink-0 position-relative">
-                                                <div class="bg-white rounded-circle border border-3 border-white shadow-sm d-flex align-items-center justify-content-center text-white fw-bold ${statusColor}" style="width:50px;height:50px;">
-                                                    ${initials}
-                                                </div>
-                                                ${index < history.length - 1 ? '<div class="position-absolute top-50 start-50 translate-middle-x bg-light" style="width:2px; height:70px; margin-top:30px;"></div>' : ''}
+                                <div class="d-flex gap-4 py-4 ${index < history.length - 1 ? 'border-bottom' : ''}">
+                                    <div class="flex-shrink-0 position-relative">
+                                        <div class="bg-white rounded-circle border border-3 border-white shadow-sm d-flex align-items-center justify-content-center text-white fw-bold ${statusColor}" style="width:50px;height:50px;">
+                                            ${initials}
+                                        </div>
+                                        ${index < history.length - 1 ? '<div class="position-absolute top-50 start-50 translate-middle-x bg-light" style="width:2px; height:70px; margin-top:30px;"></div>' : ''}
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <h6 class="mb-1 fw-bold">${h.verified_by || 'Unknown User'}</h6>
+                                                <small class="text-muted">${h.verified_on || ''}</small>
                                             </div>
-                                            <div class="flex-grow-1">
-                                                <div class="d-flex justify-content-between align-items-start">
-                                                    <div>
-                                                        <h6 class="mb-1 fw-bold">${h.verified_by || 'Unknown User'}</h6>
-                                                        <small class="text-muted">${h.verified_on || ''}</small>
-                                                    </div>
-                                                    <span class="badge ${statusColor} px-3 py-2">${h.status_text || 'Unknown'}</span>
-                                                </div>
-                                                ${h.remarks ? `
-                                                <div class="mt-3 p-3 bg-light rounded small border">
-                                                    ${h.remarks.replace(/\n/g, '<br>')}
-                                                </div>` : '<em class="text-muted small mt-2 d-block">No remarks provided</em>'}
-                                                ${h.attachment_name ? `
-                                                <div class="mt-2">
-                                                    <a href="/api/Verification/Attachment/${encodeURIComponent(crfId)}/${encodeURIComponent(releaseDate)}"
-                                                       target="_blank"
-                                                       class="badge bg-info text-dark text-decoration-none">
-                                                        <i class="fas fa-paperclip me-1"></i>${h.attachment_name}
-                                                    </a>
-                                                </div>` : ''}
-                                            </div>
-                                        </div>`;
+                                            <span class="badge ${statusColor} px-3 py-2">${h.status_text || 'Unknown'}</span>
+                                        </div>
+                                        ${h.remarks ? `
+                                        <div class="mt-3 p-3 bg-light rounded small border">
+                                            ${h.remarks.replace(/\n/g, '<br>')}
+                                        </div>` : '<em class="text-muted small mt-2 d-block">No remarks provided</em>'}
+                                        ${h.attachment_name ? `
+                                        <div class="mt-2">
+                                                            <a href="${API_BASE}/api/Verification/Attachment/${encodeURIComponent(crfId)}/${encodeURIComponent(releaseDate)}"
+                                               target="_blank"
+                                               class="badge bg-info text-dark text-decoration-none">
+                                                <i class="fas fa-paperclip me-1"></i>${h.attachment_name}
+                                            </a>
+                                        </div>` : ''}
+                                    </div>
+                                </div>`;
                 }).join('');
             }
             const modalHtml = `
-                                <div class="modal fade" id="historyModal" tabindex="-1">
-                                    <div class="modal-dialog modal-lg">
-                                        <div class="modal-content border-0 shadow-lg">
-                                            <div class="modal-header bg-primary text-white">
-                                                <h5 class="modal-title">
-                                                    Verification History: <strong>${crfId}</strong>
-                                                    <span class="badge ${badgeCls} ms-2">${badgeText}</span>
-                                                </h5>
-                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <div class="modal-body" style="max-height:70vh; overflow-y:auto;">
-                                                ${timelineHtml}
-                                            </div>
-                                            <div class="modal-footer border-0">
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                            </div>
-                                        </div>
+                        <div class="modal fade" id="historyModal" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content border-0 shadow-lg">
+                                    <div class="modal-header bg-primary text-white">
+                                        <h5 class="modal-title">
+                                            Verification History: <strong>${crfId}</strong>
+                                            <span class="badge ${badgeCls} ms-2">${badgeText}</span>
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                     </div>
-                                </div>`;
+                                    <div class="modal-body" style="max-height:70vh; overflow-y:auto;">
+                                        ${timelineHtml}
+                                    </div>
+                                    <div class="modal-footer border-0">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
             const existing = document.getElementById('historyModal');
             if (existing) existing.remove();
             document.body.insertAdjacentHTML('beforeend', modalHtml);
@@ -660,9 +969,11 @@
                 document.getElementById('historyModal').remove();
             });
         }
+
         document.addEventListener("DOMContentLoaded", () => {
             loadFilterDropdowns();
         });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+}
 }
