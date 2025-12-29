@@ -27,7 +27,7 @@ namespace WebApplication10.Controllers
         }
 
         [AllowAnonymous]
-        public IActionResult Index() => View();
+        public IActionResult Index() => RedirectToAction("Dashboard");
 
         [AllowAnonymous]
         public IActionResult Login() => View();

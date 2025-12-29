@@ -1,79 +1,115 @@
 ﻿@{
     ViewData["Title"] = "Daily Verification - Tech Lead";
     Layout = "~/Views/Shared/_DashboardLayout.cshtml";
+
+    string currentUserName = "Unknown";
+    try
+    {
+        var token = Context.Request.Cookies["jwtToken"] ??
+                    Context.Request.Headers["Authorization"].ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(token))
+        {
+            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(token);
+            currentUserName = jwtToken.Claims
+                .FirstOrDefault(c => c.Type == "given_name" || c.Type == "name" || c.Type == "unique_name")?.Value
+                ?? "Unknown";
+        }
+    }
+    catch { }
+
+    var allowedTLs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "JIJIN E H", "MURUGESAN P", "NIKHIL SEKHAR", "SMINA BENNY", "VISAGH S", "JOBY JOSE"
+    };
+
+    bool hasAccess = allowedTLs.Contains(currentUserName.Trim());
 }
 
-<div class="container-fluid mt-4 px-2 px-md-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="mb-0 text-primary fw-bold">Daily Verification - Tech Lead</h3>
-        <span class="text-muted small">Review all tester verifications • Confirm, Return or Close</span>
-    </div>
-
-    <div class="card shadow border-0 mb-4">
-        <div class="card-header bg-gradient bg-primary text-white">
-            <h6 class="mb-0">Search Filters</h6>
+@if (!hasAccess)
+{
+    <div class="container-fluid mt-5">
+        <div class="alert alert-danger text-center py-5">
+            <h4><i class="fas fa-lock me-2"></i> Access Restricted</h4>
+            <p>You do not have permission to access the Tech Lead Verification page.</p>
+            <p>Only designated Tech Leads can view this page.</p>
+            <a href="@Url.Action("Index", "Home")" class="btn btn-primary mt-3">Go to Dashboard</a>
         </div>
-        <div class="card-body">
-            <form id="tlFilterForm">
-                <div class="row g-3 align-items-end">
-                    <div class="col-lg-4 col-md-6">
-                        <label class="form-label fw-semibold">From Date <span class="text-danger">*</span></label>
-                        <input type="date" class="form-control" id="tlFromDate" required />
+    </div>
+}
+else
+{
+    <div class="container-fluid mt-4 px-2 px-md-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="mb-0 text-primary fw-bold">Daily Verification - Tech Lead</h3>
+            <span class="text-muted small">Review all tester verifications • Confirm, Return or Close</span>
+        </div>
+        <div class="card shadow border-0 mb-4">
+            <div class="card-header bg-gradient bg-primary text-white">
+                <h6 class="mb-0">Search Filters</h6>
+            </div>
+            <div class="card-body">
+                <form id="tlFilterForm">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-lg-4 col-md-6">
+                            <label class="form-label fw-semibold">From Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="tlFromDate" required />
+                        </div>
+                        <div class="col-lg-4 col-md-6">
+                            <label class="form-label fw-semibold">To Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="tlToDate" required />
+                        </div>
+                        <div class="col-lg-4 col-md-12">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-search me-2"></i>Search
+                            </button>
+                        </div>
                     </div>
-                    <div class="col-lg-4 col-md-6">
-                        <label class="form-label fw-semibold">To Date <span class="text-danger">*</span></label>
-                        <input type="date" class="form-control" id="tlToDate" required />
-                    </div>
-                    <div class="col-lg-4 col-md-12">
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="fas fa-search me-2"></i>Search
-                        </button>
-                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="card shadow border-0" id="tlResultCard" style="display:none;">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Pending for TL Approval (<span id="tlPendingCount">0</span>)</h5>
+                <button class="btn btn-light btn-sm" id="tlExportExcel">
+                    <i class="fas fa-file-excel me-1"></i> Export to Excel
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle" id="tlTable">
+                        <thead class="table-primary sticky-top">
+                            <tr>
+                                <th>CRF ID</th>
+                                <th>Request ID</th>
+                                <th>CRF Name</th>
+                                <th>Release Date</th>
+                                <th>Tech Lead</th>
+                                <th>Developer</th>
+                                <th>Tester</th>
+                                <th>Status</th>
+                                <th>Tester Remarks</th>
+                                <th>Attachment</th>
+                                <th>TL Remarks *</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tlBody"></tbody>
+                    </table>
                 </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="card shadow border-0" id="tlResultCard" style="display:none;">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Pending for TL Approval (<span id="tlPendingCount">0</span>)</h5>
-            <button class="btn btn-light btn-sm" id="tlExportExcel">
-                <i class="fas fa-file-excel me-1"></i> Export to Excel
-            </button>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0 align-middle" id="tlTable">
-                    <thead class="table-primary sticky-top">
-                        <tr>
-                            <th>CRF ID</th>
-                            <th>Request ID</th>
-                            <th>CRF Name</th>
-                            <th>Release Date</th>
-                            <th>Tech Lead</th>
-                            <th>Developer</th>
-                            <th>Tester</th>
-                            <th>Status</th>
-                            <th>Tester Remarks</th>
-                            <th>Attachment</th>
-                            <th>TL Remarks *</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tlBody"></tbody>
-                </table>
-            </div>
-            <div class="text-center py-5 text-muted" id="tlEmpty" style="display:none;">
-                <h5>No pending verifications found in selected date range</h5>
-                <p>Please try a different date range.</p>
+                <div class="text-center py-5 text-muted" id="tlEmpty" style="display:none;">
+                    <h5>No pending verifications found in selected date range</h5>
+                    <p>Please try a different date range.</p>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-@section Scripts {
+    @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
+        const API_BASE = '/QA_APPLICATION/api';
+
         let tlData = [];
 
         function formatDateForOracle(dateStr) {
@@ -90,7 +126,6 @@
             e.preventDefault();
             const from = document.getElementById('tlFromDate').value;
             const to = document.getElementById('tlToDate').value;
-
             if (!from || !to) {
                 alert("Please select both From Date and To Date");
                 return;
@@ -113,14 +148,20 @@
             btn.innerHTML = 'Searching...';
 
             try {
-                const res = await fetch('/api/Verification/tlview', {
+                const res = await fetch(`${API_BASE}/Verification/tlview`, {  // ← Fixed
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                     body: JSON.stringify(payload)
                 });
-
                 if (!res.ok) throw new Error(await res.text());
                 tlData = await res.json();
+
+                // Clear TL remarks on first view (unless CRF is returned)
+                tlData.forEach(item => {
+                    if (item.verifyStatus !== 3) {
+                        item.tlRemarks = "";
+                    }
+                });
 
                 renderTLTable();
                 document.getElementById('tlResultCard').style.display = 'block';
@@ -137,204 +178,214 @@
         function renderTLTable() {
             const tbody = document.getElementById('tlBody');
             tbody.innerHTML = '';
+            document.getElementById('tlEmpty').style.display = 'none';
 
             if (!tlData.length) {
                 document.getElementById('tlEmpty').style.display = 'block';
                 return;
             }
 
-            document.getElementById('tlEmpty').style.display = 'none';
-
             const statusMap = {
-                "1": 'Working',
-                "2": 'Not Working',
-                "3": 'In Progress',
-                "4": 'Data need to capture',
-                "5": 'User feedback pending',
-                "6": 'On Hold'
+                1: 'Working',
+                2: 'Not Working',
+                3: 'In Progress',
+                4: 'Data need to capture',
+                5: 'User feedback pending'
             };
 
             tlData.forEach((item, index) => {
                 const safe = (val) => (val === null || val === undefined || val.toString().trim() === '') ? '-' : val.toString().trim();
-
                 const crfName = item.crfName && item.crfName.trim() ? item.crfName.trim() : 'Untitled CRF';
                 const statusText = statusMap[item.workingStatus] || 'Pending';
-                const badgeClass = item.workingStatus === "1" ? 'bg-success' : 'bg-warning';
+                const badgeClass = item.workingStatus == 1 ? 'bg-success' : 'bg-warning';
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                            <td class="fw-bold">
-                                <a href="#" class="text-primary text-decoration-none crf-history-link" data-index="${index}">
-                                    ${safe(item.crfId)}
-                                </a>
-                            </td>
-                            <td>${safe(item.requestId)}</td>
-                            <td class="text-wrap" style="max-width:300px;">${crfName}</td>
-                            <td>${safe(item.releaseDate)}</td>
-                            <td>${safe(item.techLead)}</td>
-                            <td>${safe(item.developer)}</td>
-                            <td><strong>${safe(item.tester)}</strong></td>
-                            <td><span class="badge ${badgeClass}">${statusText}</span></td>
-                            <td class="text-wrap small">${safe(item.remarks)}</td>
-                            <td>
-                                ${item.attachmentName ?
-                        `<a href="/api/Verification/Attachment/${encodeURIComponent(item.crfId)}/${encodeURIComponent(item.releaseDate)}" target="_blank">
-                                        <i class="fas fa-paperclip"></i> ${safe(item.attachmentName)}
-                                    </a>` : '-'}
-                            </td>
-                            <td>
-                                <textarea class="form-control form-control-sm" rows="3" placeholder="Enter TL remarks (required for Confirm)...">${safe(item.tlRemarks)}</textarea>
-                            </td>
-                            <td class="text-center">
-                                <div class="dropdown d-inline-block">
-                                    <button class="btn btn-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                        <i class="fas fa-check-circle me-1"></i> Action
-                                    </button>
-                                    <ul class="dropdown-menu">
-                                        <li>
-                                            <button class="dropdown-item text-success confirm-tl" data-crf="${safe(item.crfId)}">
-                                                <i class="fas fa-check me-2"></i> Confirm
+                                    <td class="fw-bold">
+                                        <a href="#" class="text-primary text-decoration-none crf-history-link" data-index="${index}">
+                                            ${safe(item.crfId)}
+                                        </a>
+                                    </td>
+                                    <td>${safe(item.requestId)}</td>
+                                    <td class="text-wrap" style="max-width:300px;">${crfName}</td>
+                                    <td>${safe(item.releaseDate)}</td>
+                                    <td>${safe(item.techLead)}</td>
+                                    <td>${safe(item.developer)}</td>
+                                    <td><strong>${safe(item.tester)}</strong></td>
+                                    <td><span class="badge ${badgeClass}">${statusText}</span></td>
+                                    <td class="text-wrap small">${safe(item.remarks)}</td>
+                                    <td>
+                                        ${item.attachmentName ?
+                        `<a href="${API_BASE}/api/Verification/Attachment/${encodeURIComponent(item.crfId)}/${encodeURIComponent(item.releaseDate)}" target="_blank">
+                                                <i class="fas fa-paperclip"></i> ${safe(item.attachmentName)}
+                                            </a>` : '-'}
+                                    </td>
+                                    <td>
+                                        <textarea class="form-control form-control-sm" rows="3" placeholder="Enter TL remarks here..." data-crf="${item.crfId}">
+                                            ${item.tlRemarks || ''}
+                                        </textarea>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="dropdown d-inline-block">
+                                            <button class="btn btn-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                <i class="fas fa-check-circle me-1"></i> Action
                                             </button>
-                                        </li>
-                                        <li>
-                                            <button class="dropdown-item text-warning return-tl" data-crf="${safe(item.crfId)}">
-                                                <i class="fas fa-undo me-2"></i> Return
-                                            </button>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </td>
-                        `;
+                                            <ul class="dropdown-menu">
+                                                <li><button class="dropdown-item text-success confirm-tl" data-crf="${item.crfId}">Confirm</button></li>
+                                                <li><button class="dropdown-item text-warning return-tl" data-crf="${item.crfId}">Return</button></li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                `;
                 tbody.appendChild(row);
             });
 
-            // Attach CRF ID click for history
+            // Attach events
             document.querySelectorAll('.crf-history-link').forEach(link => {
                 link.addEventListener('click', e => {
                     e.preventDefault();
-                    const index = e.target.dataset.index;
-                    const item = tlData[index];
-                    showTLHistoryModal(item);
+                    const index = parseInt(e.target.dataset.index);
+                    showTLHistoryModal(tlData[index]);
                 });
             });
 
-            // Attach action buttons
-            document.querySelectorAll('.confirm-tl').forEach(b => b.onclick = (e) => {
-                const crfId = b.dataset.crf;
-                const row = b.closest('tr');
-                const remarks = row.querySelector('textarea').value.trim();
-                if (!remarks) return alert("TL Remarks required for Confirm");
-                tlAction(crfId, 'CONFIRM', remarks);
+            document.querySelectorAll('.confirm-tl').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const crfId = btn.dataset.crf;
+                    const textarea = document.querySelector(`textarea[data-crf="${crfId}"]`);
+                    const remarks = textarea.value.trim();
+                    if (!remarks) {
+                        alert("TL Remarks are required for Confirm");
+                        return;
+                    }
+                    tlAction(crfId, 'CONFIRM', remarks);
+                });
             });
 
-            document.querySelectorAll('.return-tl').forEach(b => b.onclick = (e) => {
-                const crfId = b.dataset.crf;
-                const row = b.closest('tr');
-                const remarks = row.querySelector('textarea').value.trim();
-                tlAction(crfId, 'RETURN', remarks);
+            document.querySelectorAll('.return-tl').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const crfId = btn.dataset.crf;
+                    const textarea = document.querySelector(`textarea[data-crf="${crfId}"]`);
+                    const remarks = textarea.value.trim();
+                    if (!remarks && !confirm("Are you sure you want to Return without remarks?")) return;
+                    tlAction(crfId, 'RETURN', remarks);
+                });
             });
         }
 
         function showTLHistoryModal(item) {
-            // We don't have full history JSON in TL view, but we can show current tester verification
-            const history = [{
-                verified_by: item.testerVerifiedBy || 'Unknown',
-                verified_on: item.testerVerifiedOn || 'Unknown Date',
-                status_text: item.workingStatusText || 'Unknown',
-                remarks: item.remarks || 'No remarks',
-                attachment_name: item.attachmentName || null
-            }];
+            let entries = [];
 
-            let timelineHtml = "";
-            if (history.length === 0) {
-                timelineHtml = `<p class='text-center text-muted py-5'>No verification details available</p>`;
+            entries.push({
+                by: item.tester || 'Unknown Tester',
+                on: item.testerVerifiedOn || 'Unknown Date',
+                status: item.workingStatusText || 'Pending',
+                remarks: item.remarks || 'No remarks',
+                attachment: item.attachmentName,
+                type: 'tester'
+            });
+
+            if (item.tlVerifiedBy && item.tlVerifyOn) {
+                entries.push({
+                    by: item.tlVerifiedBy || 'Tech Lead',
+                    on: item.tlVerifyOn || 'Unknown Date',
+                    status: item.tlAction === 'CONFIRM' ? 'Confirmed' : item.tlAction === 'RETURN' ? 'Returned to Tester' : 'TL Action',
+                    remarks: item.tlRemarks || 'No TL remarks',
+                    attachment: null,
+                    type: 'tl',
+                    action: item.tlAction
+                });
+            }
+
+            entries.sort((a, b) => new Date(b.on) - new Date(a.on));
+
+            let timelineHtml = '';
+            if (entries.length === 0) {
+                timelineHtml = `<p class="text-center text-muted py-5">No verification history available</p>`;
             } else {
-                timelineHtml = history.map(h => {
-                    const initials = h.verified_by ? h.verified_by.trim().split(' ').map(n => n[0]).join('').toUpperCase() : '??';
-                    const statusColor =
-                        h.status_text === 'Working' ? 'bg-success' :
-                            h.status_text === 'Not Working' ? 'bg-danger' :
-                                h.status_text === 'In Progress' ? 'bg-warning' :
-                                    h.status_text === 'Data need to capture' ? 'bg-info' :
-                                        h.status_text === 'User feedback pending' ? 'bg-secondary' : 'bg-primary';
+                timelineHtml = entries.map(entry => {
+                    const initials = entry.by.trim().split(' ').map(n => n[0]).join('').toUpperCase() || '??';
+                    let colorClass = 'bg-primary';
+                    if (entry.type === 'tester') {
+                        colorClass = entry.status === 'Working' ? 'bg-success' : 'bg-warning';
+                    } else if (entry.action === 'CONFIRM') {
+                        colorClass = 'bg-success';
+                    } else if (entry.action === 'RETURN') {
+                        colorClass = 'bg-danger';
+                    }
 
                     return `
-                                <div class="d-flex gap-4 py-4">
-                                    <div class="flex-shrink-0">
-                                        <div class="bg-white rounded-circle border border-3 border-white shadow-sm d-flex align-items-center justify-content-center text-white fw-bold ${statusColor}" style="width:50px;height:50px;">
-                                            ${initials}
-                                        </div>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <h6 class="mb-1 fw-bold">${h.verified_by}</h6>
-                                                <small class="text-muted">${h.verified_on}</small>
+                                        <div class="d-flex gap-4 py-4 ${entries.indexOf(entry) < entries.length - 1 ? 'border-bottom' : ''}">
+                                            <div class="flex-shrink-0">
+                                                <div class="bg-white rounded-circle border border-3 border-white shadow-sm d-flex align-items-center justify-content-center text-white fw-bold ${colorClass}" style="width:50px;height:50px;">
+                                                    ${initials}
+                                                </div>
                                             </div>
-                                            <span class="badge ${statusColor} px-3 py-2">${h.status_text}</span>
-                                        </div>
-                                        ${h.remarks ? `
-                                        <div class="mt-3 p-3 bg-light rounded small border">
-                                            ${h.remarks.replace(/\n/g, '<br>')}
-                                        </div>` : '<em class="text-muted small mt-2 d-block">No remarks provided</em>'}
-                                        ${h.attachment_name ? `
-                                        <div class="mt-2">
-                                            <a href="/api/Verification/Attachment/${encodeURIComponent(item.crfId)}/${encodeURIComponent(item.releaseDate)}" target="_blank"
-                                               class="badge bg-info text-dark text-decoration-none">
-                                                <i class="fas fa-paperclip me-1"></i>${h.attachment_name}
-                                            </a>
-                                        </div>` : ''}
-                                    </div>
-                                </div>`;
+                                            <div class="flex-grow-1">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <h6 class="mb-1 fw-bold">${entry.by}</h6>
+                                                        <small class="text-muted">${entry.on}</small>
+                                                        ${entry.type === 'tl' ? `<span class="badge bg-dark ms-2">${entry.status}</span>` : ''}
+                                                    </div>
+                                                    <span class="badge ${colorClass} px-3 py-2">${entry.status}</span>
+                                                </div>
+                                                ${entry.remarks ? `
+                                                <div class="mt-3 p-3 bg-light rounded small border">
+                                                    ${entry.remarks.replace(/\n/g, '<br>')}
+                                                </div>` : '<em class="text-muted small mt-2 d-block">No remarks</em>'}
+                                                ${entry.attachment ? `
+                                                <div class="mt-2">
+                                                                    <a href="${API_BASE}/api/Verification/Attachment/${encodeURIComponent(item.crfId)}/${encodeURIComponent(item.releaseDate)}" target="_blank"
+                                                       class="badge bg-info text-dark text-decoration-none">
+                                                        <i class="fas fa-paperclip me-1"></i>${entry.attachment}
+                                                    </a>
+                                                </div>` : ''}
+                                            </div>
+                                        </div>`;
                 }).join('');
             }
 
             const modalHtml = `
-                        <div class="modal fade" id="tlHistoryModal" tabindex="-1">
-                            <div class="modal-dialog modal-lg">
-                                <div class="modal-content border-0 shadow-lg">
-                                    <div class="modal-header bg-primary text-white">
-                                        <h5 class="modal-title">
-                                            Tester Verification Details: <strong>${item.crfId}</strong>
-                                        </h5>
-                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                <div class="modal fade" id="tlHistoryModal" tabindex="-1">
+                                    <div class="modal-dialog modal-lg">
+                                        <div class="modal-content border-0 shadow-lg">
+                                            <div class="modal-header bg-primary text-white">
+                                                <h5 class="modal-title">Verification History: <strong>${item.crfId}</strong></h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body" style="max-height:70vh; overflow-y:auto;">
+                                                ${timelineHtml}
+                                            </div>
+                                            <div class="modal-footer border-0">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="modal-body" style="max-height:70vh; overflow-y:auto;">
-                                        ${timelineHtml}
-                                    </div>
-                                    <div class="modal-footer border-0">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>`;
+                                </div>`;
 
-            const existing = document.getElementById('tlHistoryModal');
-            if (existing) existing.remove();
-
+            document.getElementById('tlHistoryModal')?.remove();
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = new bootstrap.Modal(document.getElementById('tlHistoryModal'));
-            modal.show();
+            new bootstrap.Modal(document.getElementById('tlHistoryModal')).show();
         }
 
         async function tlAction(crfId, action, remarks = "") {
-            const payload = [{
-                crfId: crfId,
-                tlRemarks: remarks,
-                action: action
-            }];
+            const res = await fetch(`${API_BASE}/Verification/tlsave`, {  // ← Fixed
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify(payload)
+            });
 
             const token = localStorage.getItem('jwtToken');
-
             try {
-                const res = await fetch('/api/Verification/tlsave', {
+                const res = await fetch('${API_BASE}/api/Verification/tlsave', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                     body: JSON.stringify(payload)
                 });
 
                 if (res.ok) {
-                    alert(action === 'CONFIRM' ? "Confirmed successfully!" : "Returned successfully");
+                    alert(action === 'CONFIRM' ? "Confirmed successfully!" : "Returned to tester successfully!");
                     document.getElementById('tlFilterForm').dispatchEvent(new Event('submit'));
                 } else {
                     alert("Failed: " + await res.text());
@@ -344,11 +395,9 @@
             }
         }
 
-        // Export to Excel
         document.getElementById('tlExportExcel')?.addEventListener('click', () => {
             if (tlData.length === 0) return alert("No data to export");
-
-            const ws = XLSX.utils.json_to_sheet(tlData.map(d => ({
+            const exportData = tlData.map(d => ({
                 "CRF ID": d.crfId,
                 "Request ID": d.requestId,
                 "CRF Name": d.crfName,
@@ -357,13 +406,14 @@
                 "Developer": d.developer,
                 "Tester": d.tester,
                 "Status": d.workingStatusText || 'Pending',
-                "Tester Remarks": d.remarks,
+                "Tester Remarks": d.remarks || '',
                 "TL Remarks": d.tlRemarks || ''
-            })));
-
+            }));
+            const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "TL Pending");
             XLSX.writeFile(wb, `TL_Pending_Verifications_${new Date().toISOString().slice(0, 10)}.xlsx`);
         });
     </script>
+    }
 }

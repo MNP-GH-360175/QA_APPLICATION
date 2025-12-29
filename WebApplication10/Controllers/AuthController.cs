@@ -46,12 +46,14 @@ namespace WebApplication10.Controllers
                 {
                     var token = GenerateJwtToken(empCode, empName);
 
+                    // === CRITICAL FIX FOR UAT SUBFOLDER + SECURITY ===
                     Response.Cookies.Append("jwtToken", token, new CookieOptions
                     {
                         HttpOnly = true,
-                        Secure = true,
+                        Secure = true,                  
                         SameSite = SameSiteMode.Strict,
-                        Expires = DateTime.UtcNow.AddHours(8)
+                        Expires = DateTime.UtcNow.AddHours(8),
+                        Path = "/"          
                     });
 
                     return Ok(new

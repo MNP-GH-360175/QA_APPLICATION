@@ -2,6 +2,7 @@
     ViewData["Title"] = "Login";
     Layout = null;
 }
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,108 +13,132 @@
     <link rel="stylesheet" href="~/css/login.css" />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <!-- Prevent swipe back/forward gestures -->
     <style>
         body {
             overscroll-behavior-x: none;
             touch-action: pan-y pinch-zoom;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            font-family: 'Poppins', sans-serif;
+        }
+        .login-container {
+            display: flex;
+            max-width: 900px;
+            margin: auto;
+            background: white;
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        .left-side {
+            flex: 1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px;
+            text-align: center;
+        }
+        .user-icon {
+            font-size: 6rem;
+            margin-bottom: 20px;
+        }
+        .right-side {
+            flex: 1;
+            padding: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .btn-login {
+            background: #ffc107;
+            border: none;
+            padding: 12px;
+            font-weight: 600;
+            border-radius: 8px;
+        }
+        #errorMessage {
+            margin-top: 15px;
+            text-align: center;
+            font-weight: 500;
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <!-- Left Side: Welcome + Icon -->
         <div class="left-side">
             <div class="user-icon">
-                <i class="fas fa-user"></i>
+                <i class="fas fa-user-tie"></i>
             </div>
             <h1>Welcome.</h1>
-            <p>Welcome to Quality Assurance Department Manappuram finance limited</p>
+            <p>Welcome to QA Department<br/>Manappuram Finance Limited</p>
         </div>
-        <!-- Right Side: Login Form -->
         <div class="right-side">
-            <h2>Employee Login</h2>
+            <h2 class="text-center mb-4">Employee Login</h2>
+            <div id="errorMessage"></div>
             <form id="loginForm" autocomplete="off">
-                <!-- Hidden dummy inputs to confuse browser autofill -->
-                <input type="text" style="display:none;" autocomplete="off" />
-                <input type="password" style="display:none;" autocomplete="new-password" />
-
+                <input type="text" style="display:none;" />
+                <input type="password" style="display:none;" />
                 <div class="form-group">
-                    <label for="EmpCode">EmpCode</label>
-                    <input type="text" id="EmpCode" autocomplete="nope" readonly required autofocus />
+                    <label for="EmpCode">Emp Code</label>
+                    <input type="text" id="EmpCode" class="form-control form-control-lg" placeholder="Enter Emp Code" required />
                 </div>
                 <div class="form-group">
                     <label for="Password">Password</label>
-                    <input type="password" id="Password" autocomplete="new-password" readonly required />
+                    <input type="password" id="Password" class="form-control form-control-lg" placeholder="Enter Password" required />
                 </div>
-                <button type="submit" class="btn-login">Login</button>
+                <button type="submit" class="btn btn-warning btn-lg w-100 btn-login">
+                    <i class="fas fa-sign-in-alt me-2"></i> Login
+                </button>
             </form>
-            <div id="errorMessage"></div>
         </div>
     </div>
+
     <script>
-        // Prevent swipe back/forward
-        document.addEventListener('touchstart', function (e) {
-            const edgeMargin = 60;
-            const touch = e.touches[0];
-            if (touch && (touch.pageX < edgeMargin || touch.pageX > (window.innerWidth - edgeMargin))) {
-                e.preventDefault();
-            }
-        }, { passive: false });
-        if (history.replaceState) {
-            history.replaceState(null, null, location.href);
-        }
+        // Prevent back swipe
+        history.pushState(null, null, location.href);
+        window.onpopstate = () => history.go(1);
 
-        // Remove readonly on focus (prevents initial autofill)
-        document.getElementById("EmpCode").addEventListener("focus", function () {
-            this.removeAttribute("readonly");
-        });
-        document.getElementById("Password").addEventListener("focus", function () {
-            this.removeAttribute("readonly");
-        });
-
-        document.getElementById("loginForm").addEventListener("submit", async function (e) {
+        document.getElementById("loginForm").addEventListener("submit", async (e) => {
             e.preventDefault();
+
             const empCode = document.getElementById("EmpCode").value.trim();
             const password = document.getElementById("Password").value;
             const errorDiv = document.getElementById("errorMessage");
-            errorDiv.textContent = "";
-            errorDiv.style.color = "red";
+
+            errorDiv.innerHTML = "";
+
             if (!empCode || !password) {
-                errorDiv.textContent = "Please enter both EmpCode and Password";
+                errorDiv.innerHTML = '<div class="alert alert-danger">Please enter both Emp Code and Password</div>';
                 return;
             }
+
             try {
-                console.log("Attempting login:", empCode);
-                const response = await fetch('/api/Auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ EmpCode: empCode, Password: password })
-                });
-                console.log("Status:", response.status);
-                const text = await response.text();
-                console.log("Raw response:", text);
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (err) {
-                    errorDiv.textContent = "Invalid server response";
-                    return;
-                }
+                const response = await fetch('/QA_APPLICATION/api/Auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ EmpCode: empCode, Password: password })
+});
+
+                const data = await response.json();
+
                 if (response.ok && data.token) {
-                    console.log("Login successful!", data);
                     localStorage.setItem('jwtToken', data.token);
                     localStorage.setItem('empName', data.empName || "User");
                     localStorage.setItem('empCode', data.empCode || empCode);
-                    errorDiv.style.color = "green";
-                    errorDiv.textContent = "Login successful! Redirecting...";
-                    window.location.replace("/Home/Dashboard");
+
+                    errorDiv.innerHTML = '<div class="alert alert-success">Login successful! Redirecting...</div>';
+                    setTimeout(() => {
+                        window.location.replace('/Home/Dashboard');
+                    }, 1000);
                 } else {
-                    errorDiv.textContent = data.message || "Invalid EmpCode or Password";
+                    errorDiv.innerHTML = `<div class="alert alert-danger">${data.message || "Invalid credentials"}</div>`;
                 }
             } catch (err) {
-                console.error("Error:", err);
-                errorDiv.textContent = "Network error. Please try again.";
+                errorDiv.innerHTML = '<div class="alert alert-danger">Network error. Please try again.</div>';
             }
         });
     </script>
